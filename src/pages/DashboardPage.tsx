@@ -1,6 +1,7 @@
 import { useMemo, useState, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { DeptIcon } from '@/components/DeptIcon';
 import { DateRangePills } from '@/components/DateRangePills';
 import { DepartmentFilter } from '@/components/DepartmentFilter';
@@ -41,6 +42,7 @@ const DEPT_COLORS = [
 export function DashboardPage() {
   const { sessions, departments, currentUser } = useAppStore();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [filterDept, setFilterDept] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
   const gradientId = useId();
@@ -315,7 +317,7 @@ export function DashboardPage() {
             <CardTitle className="text-sm">Monthly Average Score</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={isMobile ? 200 : 240}>
               <AreaChart data={monthlyTrend}>
                 <defs>
                   <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -372,7 +374,7 @@ export function DashboardPage() {
               <CardTitle className="text-sm">Department Trends</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={isMobile ? 220 : 280}>
                 <LineChart data={deptTrends}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
@@ -412,7 +414,7 @@ export function DashboardPage() {
                   ))}
                 </LineChart>
               </ResponsiveContainer>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 justify-center">
+              <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-3 justify-center${isMobile ? ' max-h-16 overflow-y-auto' : ''}`}>
                 {departments.map((dept, i) => {
                   const hasSessions = completedSessions.some(
                     (s) => s.departmentId === dept.id,
@@ -421,10 +423,10 @@ export function DashboardPage() {
                   return (
                     <div key={dept.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <div
-                        className="w-2.5 h-2.5 rounded-full"
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: DEPT_COLORS[i % DEPT_COLORS.length] }}
                       />
-                      {dept.name}
+                      <span className={isMobile ? 'max-w-[80px] truncate' : undefined}>{dept.name}</span>
                     </div>
                   );
                 })}
@@ -445,7 +447,8 @@ export function DashboardPage() {
                   <PolarGrid stroke="#e2e8f0" />
                   <PolarAngleAxis
                     dataKey="department"
-                    tick={{ fontSize: 10, fill: '#64748b' }}
+                    tick={{ fontSize: isMobile ? 8 : 10, fill: '#64748b' }}
+                    tickFormatter={isMobile ? (v: string) => (v.length > 7 ? v.slice(0, 7) + '..' : v) : undefined}
                   />
                   <PolarRadiusAxis
                     angle={90}
@@ -502,10 +505,11 @@ export function DashboardPage() {
                   <YAxis
                     type="category"
                     dataKey="name"
-                    width={100}
-                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    width={isMobile ? 70 : 100}
+                    tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }}
                     axisLine={false}
                     tickLine={false}
+                    tickFormatter={isMobile ? (v: string) => (v.length > 8 ? v.slice(0, 8) + '..' : v) : undefined}
                   />
                   <Tooltip
                     formatter={(value, _name, props) => [
@@ -566,7 +570,7 @@ export function DashboardPage() {
                     fontSize: '12px',
                   }}
                 />
-                <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={48}>
+                <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={isMobile ? 32 : 48}>
                   {scoreDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}

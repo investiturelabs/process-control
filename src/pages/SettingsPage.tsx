@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/context';
-import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database, Copy, Upload, Download, HardDrive } from 'lucide-react';
+import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database, Copy, Upload, Download, HardDrive, Search, X } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
-import type { Question } from '@/types';
+import type { Question, Department } from '@/types';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -65,6 +65,9 @@ export function SettingsPage() {
 
   // Import dialog state
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  // Question search state
+  const [searchQuery, setSearchQuery] = useState('');
 
   const openAddDept = () => {
     setEditingDept(null);
@@ -203,6 +206,33 @@ export function SettingsPage() {
     [editingDeptId, departments]
   );
 
+  const filteredDepartments = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return departments;
+
+    return departments
+      .map((dept) => {
+        const deptNameMatches = dept.name.toLowerCase().includes(q);
+        if (deptNameMatches) return dept;
+
+        const matchingQuestions = dept.questions.filter(
+          (question) =>
+            question.text.toLowerCase().includes(q) ||
+            question.riskCategory.toLowerCase().includes(q) ||
+            question.criteria.toLowerCase().includes(q)
+        );
+
+        if (matchingQuestions.length === 0) return null;
+        return { ...dept, questions: matchingQuestions };
+      })
+      .filter((d): d is Department => d !== null);
+  }, [departments, searchQuery]);
+
+  const totalMatchCount = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    return filteredDepartments.reduce((acc, d) => acc + d.questions.length, 0);
+  }, [filteredDepartments, searchQuery]);
+
   if (!isAdmin) {
     return (
       <div className="max-w-2xl mx-auto">
@@ -315,10 +345,37 @@ export function SettingsPage() {
           </Dialog>
           </div>
         </CardHeader>
+        <div className="px-6 pb-0 pt-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search questions..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 pr-8"
+              aria-label="Search questions"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {totalMatchCount !== null && (
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {totalMatchCount} question{totalMatchCount !== 1 ? 's' : ''} in{' '}
+              {filteredDepartments.length} department{filteredDepartments.length !== 1 ? 's' : ''}
+            </p>
+          )}
+        </div>
         <CardContent>
           <div className="space-y-4">
-            {departments.map((dept) => (
-              <details key={dept.id} className="group">
+            {filteredDepartments.map((dept) => (
+              <details key={dept.id} className="group" open={!!searchQuery.trim() || undefined}>
                 <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground py-1 flex items-center gap-2">
                   <DeptIcon name={dept.icon} size={14} className="shrink-0" />
                   <span className="flex-1">{dept.name}{' '}
@@ -421,6 +478,14 @@ export function SettingsPage() {
                 </div>
               </details>
             ))}
+            {filteredDepartments.length === 0 && searchQuery.trim() && (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground">No questions match "{searchQuery.trim()}"</p>
+                <Button variant="link" size="sm" onClick={() => setSearchQuery('')} className="mt-1">
+                  Clear search
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

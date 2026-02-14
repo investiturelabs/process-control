@@ -42,6 +42,17 @@ const testDepts = [
         departmentId: 'dept-1',
         riskCategory: 'Safety',
         text: 'Is oven clean?',
+        criteria: 'Check all surfaces',
+        answerType: 'yes_no' as const,
+        pointsYes: 5,
+        pointsPartial: 0,
+        pointsNo: 0,
+      },
+      {
+        id: 'q2',
+        departmentId: 'dept-1',
+        riskCategory: 'Hygiene',
+        text: 'Are gloves worn?',
         criteria: '',
         answerType: 'yes_no' as const,
         pointsYes: 5,
@@ -54,7 +65,19 @@ const testDepts = [
     id: 'dept-2',
     name: 'Deli',
     icon: 'ShoppingCart',
-    questions: [],
+    questions: [
+      {
+        id: 'q3',
+        departmentId: 'dept-2',
+        riskCategory: 'Safety',
+        text: 'Is slicer clean?',
+        criteria: '',
+        answerType: 'yes_no' as const,
+        pointsYes: 5,
+        pointsPartial: 0,
+        pointsNo: 0,
+      },
+    ],
   },
 ];
 
@@ -174,9 +197,9 @@ describe('SettingsPage', () => {
     render(<SettingsPage />);
 
     expect(screen.getByText('Bakery')).toBeInTheDocument();
-    expect(screen.getByText('(1 questions)')).toBeInTheDocument();
+    expect(screen.getByText('(2 questions)')).toBeInTheDocument();
     expect(screen.getByText('Deli')).toBeInTheDocument();
-    expect(screen.getByText('(0 questions)')).toBeInTheDocument();
+    expect(screen.getByText('(1 questions)')).toBeInTheDocument();
   });
 
   it('clicking duplicate button calls duplicateDepartment', async () => {
@@ -262,5 +285,100 @@ describe('SettingsPage', () => {
     expect(
       screen.getByRole('button', { name: /reset to defaults/i }),
     ).toBeInTheDocument();
+  });
+
+  it('search input renders for admin', () => {
+    setStore({});
+    render(<SettingsPage />);
+    expect(screen.getByLabelText('Search questions')).toBeInTheDocument();
+  });
+
+  it('search input not rendered for non-admin', () => {
+    setStore({
+      currentUser: {
+        id: 'u2',
+        name: 'Regular',
+        email: 'user@test.com',
+        role: 'user',
+        avatarColor: '#111',
+      },
+    });
+    render(<SettingsPage />);
+    expect(screen.queryByLabelText('Search questions')).not.toBeInTheDocument();
+  });
+
+  it('typing filters by question text', async () => {
+    setStore({});
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    await user.type(screen.getByLabelText('Search questions'), 'oven');
+
+    expect(screen.getByText('Is oven clean?')).toBeInTheDocument();
+    expect(screen.queryByText('Are gloves worn?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Is slicer clean?')).not.toBeInTheDocument();
+  });
+
+  it('typing filters by department name', async () => {
+    setStore({});
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    await user.type(screen.getByLabelText('Search questions'), 'Deli');
+
+    // Deli dept visible with all its questions
+    expect(screen.getByText('Is slicer clean?')).toBeInTheDocument();
+    // Bakery hidden
+    expect(screen.queryByText('Is oven clean?')).not.toBeInTheDocument();
+  });
+
+  it('search is case-insensitive', async () => {
+    setStore({});
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    await user.type(screen.getByLabelText('Search questions'), 'OVEN');
+
+    expect(screen.getByText('Is oven clean?')).toBeInTheDocument();
+  });
+
+  it('no results shows empty message', async () => {
+    setStore({});
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    await user.type(screen.getByLabelText('Search questions'), 'xyznonexistent');
+
+    expect(screen.getByText(/No questions match/)).toBeInTheDocument();
+  });
+
+  it('clear button restores all departments', async () => {
+    setStore({});
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    const searchInput = screen.getByLabelText('Search questions');
+    await user.type(searchInput, 'oven');
+
+    // Deli should be filtered out
+    expect(screen.queryByText('Is slicer clean?')).not.toBeInTheDocument();
+
+    // Click clear button
+    await user.click(screen.getByLabelText('Clear search'));
+
+    // All departments restored
+    expect(screen.getByText('Is oven clean?')).toBeInTheDocument();
+    expect(screen.getByText('Deli')).toBeInTheDocument();
+  });
+
+  it('match count renders when searching', async () => {
+    setStore({});
+    const user = userEvent.setup();
+    render(<SettingsPage />);
+
+    await user.type(screen.getByLabelText('Search questions'), 'Safety');
+
+    // Safety matches q1 in Bakery and q3 in Deli = 2 questions in 2 departments
+    expect(screen.getByText(/2 questions in 2 departments/)).toBeInTheDocument();
   });
 });

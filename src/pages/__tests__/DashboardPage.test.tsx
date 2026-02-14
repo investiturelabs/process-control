@@ -24,6 +24,10 @@ vi.mock('@/components/DepartmentFilter', () => ({
   DepartmentFilter: () => <div data-testid="dept-filter" />,
 }));
 
+vi.mock('@/hooks/useIsMobile', () => ({
+  useIsMobile: () => false,
+}));
+
 vi.mock('@/lib/export', () => ({
   exportSessionsCsv: vi.fn(),
 }));

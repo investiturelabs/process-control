@@ -186,19 +186,19 @@ export function AuditPage() {
     [currentQuestion, totalQuestions, getPoints, autoSave]
   );
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (currentIndex > 0) {
       setCurrentIndex((i) => i - 1);
       setAnimKey((k) => k + 1);
     }
-  };
+  }, [currentIndex]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex((i) => i + 1);
       setAnimKey((k) => k + 1);
     }
-  };
+  }, [currentIndex, totalQuestions]);
 
   const handleFinish = async () => {
     if (!dept || !currentUser) return;
@@ -257,6 +257,42 @@ export function AuditPage() {
       setIsSaving(false);
     }
   };
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLTextAreaElement ||
+      isSaving
+    ) return;
+
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        handlePrev();
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        handleNext();
+        break;
+      case 'y': case 'Y':
+        if (currentQuestion) { e.preventDefault(); handleAnswer('yes'); }
+        break;
+      case 'n': case 'N':
+        if (currentQuestion) { e.preventDefault(); handleAnswer('no'); }
+        break;
+      case 'p': case 'P':
+        if (currentQuestion?.answerType === 'yes_no_partial') {
+          e.preventDefault();
+          handleAnswer('partial');
+        }
+        break;
+    }
+  }, [handlePrev, handleNext, handleAnswer, currentQuestion, isSaving]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   if (!dept) {
     return (
@@ -428,6 +464,15 @@ export function AuditPage() {
                 <span className="text-xs text-muted-foreground">{currentQuestion.pointsNo} pts</span>
               </button>
             </div>
+            <p className="text-center text-xs text-muted-foreground/60 mt-2 hidden sm:block">
+              <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">Y</kbd> Yes
+              {currentQuestion.answerType === 'yes_no_partial' && (
+                <>{' '}<kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">P</kbd> Partial</>
+              )}
+              {' '}<kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">N</kbd> No
+              {' '}<kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">&larr;</kbd>
+              <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">&rarr;</kbd> Navigate
+            </p>
           </div>
         </Card>
       )}

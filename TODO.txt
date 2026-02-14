@@ -1,0 +1,80 @@
+Here's the production readiness TODO list, organized by priority:
+
+  ---
+  Critical (must-have before prod)
+
+  1. Implement authentication — No real auth exists. Users log in with just name/email, no password or OAuth. First user auto-becomes admin.
+  2. Add server-side authorization to all Convex mutations — Every mutation (delete departments, change roles, modify questions, etc.) is unprotected.
+  Anyone can call them directly. The codebase has a TODO comment acknowledging this at src/context.tsx:24.
+  3. Restrict query visibility — sessions.list, users.list, invitations.list return ALL data to ANY user. User A can see User B's audit history and
+  invitation emails.
+  4. Add server-side role checks for admin operations — Admin-only actions (manage departments, questions, roles, company settings) are only gated in the
+  UI. A non-admin can call the mutations directly.
+
+  High Priority
+
+  5. Add loading states/skeletons — Pages render empty or flash before data loads. No loading indicators on Dashboard, AuditStartPage, or HistoryPage while
+  Convex queries are pending.
+  6. Handle empty questions edge case — AuditPage renders blank if a department has 0 questions. No empty state or redirect.
+  7. Add error tracking — No Sentry, LogRocket, or equivalent. Errors in production will be invisible.
+  8. Add auditSessions.by_auditorId index — The resume feature queries sessions by auditorId, but there's no index for it. Will degrade at scale.
+  9. Input validation beyond types — No max-length on text fields, no sanitization. Convex schema only validates types, not content.
+  10. Handle department deletion during active audit — If a department is deleted while someone is mid-audit, the in-progress session becomes orphaned with
+  no recovery path.
+
+  Medium Priority
+
+  11. Add pagination to HistoryPage — All sessions load at once. Will break with thousands of audits.
+  12. Add pagination to sessions.list query — Context loads ALL sessions on app init. Needs cursor-based pagination or date-range scoping.
+  13. Complete the invitation flow — Invitations are created but never transition to "accepted". No acceptance mechanism exists.
+  14. Add audit trail/change log — No record of who changed settings, questions, or roles.
+  15. Add component tests — Only utility functions are tested (37 tests). Zero component tests, zero mutation tests, zero E2E tests.
+  16. Add environment variable validation — No startup check that required env vars (Convex URL, etc.) are set. No .env.example for onboarding.
+  17. Configure CSP headers — No Content Security Policy headers configured.
+  18. Add keyboard navigation to audit flashcards — Arrow keys don't navigate between questions. Limited accessibility.
+  19. Mobile chart responsiveness — Recharts charts on DashboardPage may render too narrow on small screens.
+  20. Question versioning — Editing/deleting a question silently breaks references in past audit sessions. Scores are preserved but the question text is
+  lost.
+
+  Low Priority (nice-to-have)
+
+  21. Add search/filter for questions in Settings — Currently only browsable by collapsing department sections.
+  22. Bulk import/export of questions — No way to import questions from CSV or export them.
+  23. Department duplication — Can't copy a department's question set to create a similar one.
+  24. User deactivation — No way to disable a user without deleting their audit history.
+  25. Data export/backup — No way to export company data for backup.
+  26. Invitation expiration — Pending invitations never expire.
+  27. Remove hardcoded base path — vite.config.ts sets base: '/process-control/' which would need changing for other deployment targets.
+  28. Add analytics/event tracking — No usage metrics collection.
+
+  ---
+  That's 28 tickets. Items 1–4 are true blockers — everything else can ship behind them in priority order.
+
+
+  Batch 1: Auth & Security (PCT-1, 2, 3, 4, 9) — must go first                                                                                              
+  All touch convex/*.ts mutations/queries. Can't do 2-4 without 1 (auth) in place first. Input validation (9) fits naturally since you're already modifying
+  every mutation.                                                                                                                                           
+                                                                                                                                                            
+  Batch 2: Data Layer (PCT-8, 11, 12)
+  All touch convex/sessions.ts and the session query pipeline. Add the index (8), add pagination to the query (12), and wire up the UI pagination (11) in
+  one pass.
+
+  Batch 3: UI Resilience (PCT-5, 6, 10)
+  All about handling edge states in page components. Loading skeletons (5), empty questions (6), and orphaned audits from deleted departments (10) are all
+  "what happens when data isn't what we expect" fixes.
+
+  Batch 4: Invitations (PCT-13, 26)
+  Both touch convex/invitations.ts and the invitation UI. Build the acceptance flow (13) and add expiration (26) together.
+
+  Batch 5: Infra & Observability (PCT-7, 16, 17, 27)
+  All deployment/config concerns. Sentry (7), env validation (16), CSP headers (17), and the hardcoded base path (27) can all be addressed in one infra
+  pass.
+
+  Batch 6: UX Polish (PCT-18, 19, 21)
+  Keyboard nav (18), mobile charts (19), and settings search (21) are independent UI improvements but can be done in a single "polish" sprint.
+
+  Batch 7: Data Integrity (PCT-14, 20)
+  Audit trail (14) and question versioning (20) both deal with preserving history of changes.
+
+  Batch 8: Feature Backlog (PCT-15, 22, 23, 24, 25, 28)
+  Lower priority features that are mostly independent. Tests (15) could go earlier if you want.

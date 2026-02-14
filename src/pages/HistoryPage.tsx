@@ -99,7 +99,7 @@ export function HistoryPage() {
                   tickFormatter={(v: number) => `${v}%`}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value}%`, 'Score']}
+                  formatter={(value) => [`${value}%`, 'Score']}
                   contentStyle={{
                     borderRadius: '8px',
                     border: '1px solid #e2e8f0',

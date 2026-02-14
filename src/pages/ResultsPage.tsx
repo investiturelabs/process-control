@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
+import type { AuditSession } from '@/types';
 import { DeptIcon } from '@/components/DeptIcon';
 import {
   ArrowLeft,
@@ -26,7 +27,7 @@ export function ResultsPage() {
     : null;
 
   const answerMap = useMemo(() => {
-    if (!session) return new Map<string, (typeof session.answers)[0]>();
+    if (!session) return new Map<string, AuditSession["answers"][0]>();
     return new Map(session.answers.map((a) => [a.questionId, a]));
   }, [session]);
 

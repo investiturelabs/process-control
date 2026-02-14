@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { track } from '@/lib/analytics';
 
 export function AuditPage() {
   const { departmentId } = useParams<{ departmentId: string }>();
@@ -83,7 +84,7 @@ export function AuditPage() {
   }, [existingSession, allQuestions]);
 
   // Debounced auto-save
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const answersRef = useRef(answers);
   answersRef.current = answers;
   const sessionIdRef = useRef(sessionId);
@@ -232,6 +233,7 @@ export function AuditPage() {
           date: new Date().toISOString(),
           completed: true,
         });
+        track({ name: 'audit_completed', properties: { departmentId: dept.id, percentage: pct } });
         navigate(`/results/${sessionId}`);
       } else {
         const newId = await saveSession({
@@ -246,6 +248,7 @@ export function AuditPage() {
           percentage: pct,
           completed: true,
         });
+        track({ name: 'audit_completed', properties: { departmentId: dept.id, percentage: pct } });
         navigate(`/results/${newId}`);
       }
     } catch {
@@ -261,6 +264,20 @@ export function AuditPage() {
         <p className="text-muted-foreground">Department not found.</p>
         <Button variant="link" onClick={() => navigate('/')} className="mt-4">
           Back to dashboard
+        </Button>
+      </div>
+    );
+  }
+
+  if (totalQuestions === 0) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-20">
+        <DeptIcon name={dept.icon} size={40} className="text-muted-foreground mx-auto mb-3" />
+        <h1 className="text-xl font-semibold">{dept.name}</h1>
+        <p className="text-muted-foreground mt-2">No questions configured for this department.</p>
+        <p className="text-sm text-muted-foreground mt-1">An admin can add questions in Settings.</p>
+        <Button variant="outline" onClick={() => navigate('/audit')} className="mt-6">
+          Back to audits
         </Button>
       </div>
     );
@@ -436,7 +453,7 @@ export function AuditPage() {
             </Button>
           )}
 
-          {(isLastQuestion || answeredCount === totalQuestions) && (
+          {totalQuestions > 0 && (isLastQuestion || answeredCount === totalQuestions) && (
             <Button onClick={handleFinish} disabled={isSaving} className="gap-1.5">
               {isSaving ? 'Saving...' : 'Finish audit'}
               <ArrowRight size={14} />

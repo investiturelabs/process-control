@@ -25,4 +25,6 @@ export interface Store {
   updateSession: (sessionId: string, data: Partial<Omit<AuditSession, 'id'>>) => Promise<void>;
   removeSession: (sessionId: string) => Promise<void>;
   generateTestData: () => Promise<void>;
+  setUserActive: (userId: string, active: boolean) => Promise<void>;
+  duplicateDepartment: (stableId: string) => Promise<string>;
 }

@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { Role } from '@/types';
+import { track } from '@/lib/analytics';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ export function TeamPage() {
     inviteUser,
     updateUserRole,
     removeInvitation,
+    setUserActive,
   } = useAppStore();
 
   const [inviteEmail, setInviteEmail] = useState('');
@@ -38,6 +40,7 @@ export function TeamPage() {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -61,6 +64,7 @@ export function TeamPage() {
     setIsInviting(true);
     try {
       await inviteUser(email, inviteRole);
+      track({ name: 'user_invited', properties: { role: inviteRole } });
       setInviteEmail('');
       setInviteRole('user');
     } catch {
@@ -140,10 +144,12 @@ export function TeamPage() {
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground mb-2">Members</h2>
         <Card className="divide-y divide-border">
-          {users.map((user) => (
+          {users.map((user) => {
+            const isInactive = user.active === false;
+            return (
             <div
               key={user.id}
-              className="flex items-center justify-between px-4 py-3"
+              className={`flex items-center justify-between px-4 py-3${isInactive ? ' opacity-50' : ''}`}
             >
               <div className="flex items-center gap-3">
                 <Avatar className="h-9 w-9">
@@ -160,11 +166,37 @@ export function TeamPage() {
                     {user.id === currentUser?.id && (
                       <Badge variant="secondary" className="text-xs">You</Badge>
                     )}
+                    {isInactive && (
+                      <Badge variant="secondary" className="text-xs text-amber-700 bg-amber-50">Inactive</Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {isAdmin && user.id !== currentUser?.id && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    disabled={deactivatingId === user.id}
+                    onClick={async () => {
+                      setDeactivatingId(user.id);
+                      try {
+                        await setUserActive(user.id, isInactive);
+                        if (!isInactive) track({ name: 'user_deactivated', properties: {} });
+                        toast.success(isInactive ? `Reactivated ${user.name}` : `Deactivated ${user.name}`);
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : '';
+                        toast.error(msg.includes('last admin') ? 'Cannot deactivate the last admin.' : 'Failed to update user status.');
+                      } finally {
+                        setDeactivatingId(null);
+                      }
+                    }}
+                  >
+                    {deactivatingId === user.id ? '...' : isInactive ? 'Reactivate' : 'Deactivate'}
+                  </Button>
+                )}
                 {isAdmin && user.id !== currentUser?.id ? (
                   <Select
                     value={user.role}
@@ -193,7 +225,8 @@ export function TeamPage() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </Card>
       </div>
 

@@ -10,6 +10,7 @@ export interface User {
   email: string;
   role: Role;
   avatarColor: string;
+  active?: boolean;
 }
 
 export interface Company {

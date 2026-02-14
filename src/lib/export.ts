@@ -21,6 +21,17 @@ function downloadCsv(filename: string, rows: (string | number | boolean)[][]) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+export function exportQuestionsCsv(departments: Department[], filename = 'questions-export.csv') {
+  const header = ['Department', 'Risk Category', 'Question', 'Criteria', 'Answer Type', 'Points Yes', 'Points Partial', 'Points No'];
+  const rows: (string | number | boolean)[][] = [];
+  for (const dept of departments) {
+    for (const q of dept.questions) {
+      rows.push([dept.name, q.riskCategory, q.text, q.criteria, q.answerType, q.pointsYes, q.pointsPartial, q.pointsNo]);
+    }
+  }
+  downloadCsv(filename, [header, ...rows]);
+}
+
 export function exportSessionsCsv(
   sessions: AuditSession[],
   departments: Department[],

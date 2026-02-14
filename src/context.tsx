@@ -14,6 +14,7 @@ import type { Store } from '@/store-types';
 import type { User, Company, Department, AuditSession, Invitation, Role, Question } from './types';
 import { seedDepartments } from './seed-data';
 import type { Id } from '../convex/_generated/dataModel';
+import { track, identify } from '@/lib/analytics';
 
 const CURRENT_USER_KEY = 'pcr_currentUser';
 
@@ -23,10 +24,10 @@ const CURRENT_USER_KEY = 'pcr_currentUser';
 // UI elements are visible, not what actions are permitted.
 // TODO: Add server-side role checks in Convex mutations for privileged operations.
 
-const StoreContext = createContext<Store | null>(null);
+export const StoreContext = createContext<Store | null>(null);
 
-function mapConvexUser(doc: { _id: string; name: string; email: string; role: string; avatarColor: string }): User {
-  return { id: doc._id, name: doc.name, email: doc.email, role: doc.role as Role, avatarColor: doc.avatarColor };
+function mapConvexUser(doc: { _id: string; name: string; email: string; role: string; avatarColor: string; active?: boolean }): User {
+  return { id: doc._id, name: doc.name, email: doc.email, role: doc.role as Role, avatarColor: doc.avatarColor, active: doc.active };
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -65,6 +66,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const removeInvitationMutation = useMutation(api.invitations.remove);
   const seedAllMutation = useMutation(api.seed.seedAll);
   const generateTestDataMutation = useMutation(api.testData.generate);
+  const setActiveMutation = useMutation(api.users.setActive);
+  const duplicateDepartmentMutation = useMutation(api.departments.duplicate);
 
   // --- Loading state (Fix #14: include companyData) ---
   const loading =
@@ -115,12 +118,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   }, [invitationsData]);
 
-  // --- Sync currentUser with Convex data (role changes, etc.) ---
+  // --- Sync currentUser with Convex data (role changes, deactivation, etc.) ---
   // Fix #4: Compare ALL fields. Fix #5: Use only stable ID for lookup
   useEffect(() => {
     if (!currentUser || !usersData) return;
     const fresh = usersData.find((u) => u._id === currentUser.id);
     if (!fresh) return;
+    // Force-logout deactivated users
+    if (fresh.active === false) {
+      setCurrentUser(null);
+      localStorage.removeItem(CURRENT_USER_KEY);
+      return;
+    }
     const mapped = mapConvexUser(fresh);
     if (
       mapped.role !== currentUser.role ||
@@ -148,12 +157,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // --- Actions ---
   const login = useCallback(
     async (name: string, email: string) => {
+      const existedBefore = usersData?.some((u) => u.email === email.toLowerCase()) ?? false;
       const doc = await loginMutation({ name, email });
       const user = mapConvexUser(doc);
       setCurrentUser(user);
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+      track({ name: 'user_login', properties: { isNewUser: !existedBefore } });
+      identify(user.id, { name: user.name, role: user.role });
     },
-    [loginMutation],
+    [loginMutation, usersData],
   );
 
   const logout = useCallback(() => {
@@ -287,6 +299,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await generateTestDataMutation();
   }, [generateTestDataMutation]);
 
+  const setUserActive = useCallback(
+    async (userId: string, active: boolean) => {
+      await setActiveMutation({ userId: userId as Id<'users'>, active });
+    },
+    [setActiveMutation],
+  );
+
+  const duplicateDepartment = useCallback(
+    async (stableId: string): Promise<string> => {
+      return await duplicateDepartmentMutation({ stableId });
+    },
+    [duplicateDepartmentMutation],
+  );
+
   // Fix #2: Memoize the store object
   const store = useMemo<Store>(() => ({
     currentUser,
@@ -313,6 +339,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateSession,
     removeSession,
     generateTestData,
+    setUserActive,
+    duplicateDepartment,
   }), [
     currentUser, users, company, departments, sessions, invitations, loading,
     login, logout, setCompany, updateDepartments, saveSession,
@@ -320,6 +348,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addQuestion, updateQuestion, removeQuestion,
     addDepartment, updateDepartment, removeDepartment,
     updateSession, removeSession, generateTestData,
+    setUserActive, duplicateDepartment,
   ]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;

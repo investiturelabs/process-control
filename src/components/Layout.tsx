@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import {
   LayoutDashboard,
@@ -10,8 +10,10 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { track } from '@/lib/analytics';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 
@@ -24,11 +26,24 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { currentUser, company, logout } = useAppStore();
+  const { currentUser, company, logout, loading } = useAppStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [loadingSlow, setLoadingSlow] = useState(false);
+
+  useEffect(() => {
+    track({ name: 'page_view', properties: { path: location.pathname } });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!loading) { setLoadingSlow(false); return; }
+    const timer = setTimeout(() => setLoadingSlow(true), 10_000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const handleLogout = () => {
+    track({ name: 'user_logout', properties: {} });
     logout();
     navigate('/login');
   };
@@ -132,7 +147,7 @@ export function Layout() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-        <Outlet />
+        {loading ? <LoadingSpinner slow={loadingSlow} /> : <Outlet />}
       </main>
     </div>
   );

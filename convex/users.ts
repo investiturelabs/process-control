@@ -23,6 +23,9 @@ export const login = mutation({
       .first();
 
     if (existing) {
+      if (existing.active === false) {
+        throw new Error("Account deactivated. Contact your administrator.");
+      }
       return existing;
     }
 
@@ -51,5 +54,21 @@ export const updateRole = mutation({
   args: { userId: v.id("users"), role: v.union(v.literal("admin"), v.literal("user")) },
   handler: async (ctx, { userId, role }) => {
     await ctx.db.patch(userId, { role });
+  },
+});
+
+export const setActive = mutation({
+  args: { userId: v.id("users"), active: v.boolean() },
+  handler: async (ctx, { userId, active }) => {
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+    if (!active && user.role === "admin") {
+      const activeAdmins = (await ctx.db.query("users").collect())
+        .filter((u) => u.role === "admin" && u.active !== false && u._id !== userId);
+      if (activeAdmins.length === 0) {
+        throw new Error("Cannot deactivate the last admin");
+      }
+    }
+    await ctx.db.patch(userId, { active });
   },
 });

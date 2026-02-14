@@ -7,6 +7,7 @@ export default defineSchema({
     email: v.string(),
     role: v.union(v.literal("admin"), v.literal("user")),
     avatarColor: v.string(),
+    active: v.optional(v.boolean()),
   }).index("by_email", ["email"]),
 
   companies: defineTable({

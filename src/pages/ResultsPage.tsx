@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { getScoreColor, getGradeLabel } from '@/lib/score-colors';
 import { exportSingleAuditCsv } from '@/lib/export';
+import { track } from '@/lib/analytics';
 
 export function ResultsPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -67,7 +68,7 @@ export function ResultsPage() {
     return cats;
   }, [dept, session, answerMap]);
 
-  if (!session || !dept) {
+  if (!session) {
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">Audit not found.</p>
@@ -80,6 +81,94 @@ export function ResultsPage() {
 
   const scoreColor = getScoreColor(session.percentage);
   const gradeLabel = getGradeLabel(session.percentage);
+
+  // Degraded view: session exists but department was deleted
+  if (!dept) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => navigate('/')}
+              aria-label="Back to dashboard"
+            >
+              <ArrowLeft size={18} />
+            </Button>
+            <h1 className="font-semibold">Deleted department — Audit Results</h1>
+          </div>
+        </div>
+
+        {/* Score hero */}
+        <Card className="rounded-2xl text-center mb-6">
+          <CardContent className="p-6">
+            <div className="flex justify-center mb-3">
+              <div className={`w-16 h-16 rounded-2xl ${scoreColor.bgLight} flex items-center justify-center`}>
+                {session.percentage >= 94 ? (
+                  <Trophy size={28} className={scoreColor.text} />
+                ) : (
+                  <TrendingUp size={28} className={scoreColor.text} />
+                )}
+              </div>
+            </div>
+            <p className="text-5xl font-extrabold">{session.percentage}%</p>
+            <p className={`text-sm font-semibold mt-1 ${scoreColor.text}`}>
+              {gradeLabel}
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-6 text-sm text-muted-foreground">
+              <span>
+                <strong className="text-foreground">{session.totalPoints}</strong> /{' '}
+                {session.maxPoints} pts
+              </span>
+              <span>{new Date(session.date).toLocaleDateString()}</span>
+              <span>{session.auditorName}</span>
+            </div>
+            <div className="mt-4 h-3 bg-secondary rounded-full overflow-hidden max-w-xs mx-auto">
+              <div
+                className={`h-full rounded-full score-bar ${scoreColor.bg}`}
+                style={{ width: `${session.percentage}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Flat answer list */}
+        {session.answers.length > 0 && (
+          <Card>
+            <CardHeader className="px-4 py-3">
+              <h3 className="text-sm font-semibold">Answers</h3>
+            </CardHeader>
+            <Separator />
+            <CardContent className="p-0 divide-y divide-border/50">
+              {session.answers.map((a) => (
+                <div key={a.questionId} className="px-4 py-2.5 flex items-center gap-3">
+                  <div>
+                    {a.value === 'yes' && <CheckCircle2 size={16} className="text-emerald-500" />}
+                    {a.value === 'partial' && <MinusCircle size={16} className="text-amber-500" />}
+                    {a.value === 'no' && <XCircle size={16} className="text-red-500" />}
+                    {(a.value === null || a.value === undefined) && (
+                      <div className="w-4 h-4 rounded-full border-2 border-border" />
+                    )}
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {a.value === 'yes' ? 'Yes' : a.value === 'partial' ? 'Partial' : a.value === 'no' ? 'No' : 'Skipped'}
+                  </span>
+                  <span className="ml-auto text-xs text-muted-foreground">{a.points} pts</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="mt-6 text-center">
+          <Button onClick={() => navigate('/')}>Back to dashboard</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -103,7 +192,7 @@ export function ResultsPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => exportSingleAuditCsv(session, dept)}
+          onClick={() => { exportSingleAuditCsv(session, dept); track({ name: 'csv_exported', properties: { type: 'single_audit' } }); }}
         >
           <Download size={14} className="mr-1.5" />
           Export

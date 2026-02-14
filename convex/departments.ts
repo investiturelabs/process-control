@@ -111,7 +111,62 @@ export const remove = mutation({
       await ctx.db.delete(q._id);
     }
 
+    // Delete in-progress audit sessions (completed sessions are kept as historical records)
+    const inProgressSessions = await ctx.db
+      .query("auditSessions")
+      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .filter((q) => q.eq(q.field("completed"), false))
+      .collect();
+    for (const session of inProgressSessions) {
+      await ctx.db.delete(session._id);
+    }
+
     await ctx.db.delete(dept._id);
+  },
+});
+
+export const duplicate = mutation({
+  args: { stableId: v.string() },
+  handler: async (ctx, { stableId }) => {
+    const source = await ctx.db
+      .query("departments")
+      .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
+      .unique();
+    if (!source) throw new Error("Department not found");
+
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .collect();
+
+    const slug = source.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const newStableId = `dept-${slug}-${Date.now()}`;
+    const existing = await ctx.db.query("departments").collect();
+    const maxOrder = existing.reduce((max, d) => Math.max(max, d.sortOrder), -1);
+
+    await ctx.db.insert("departments", {
+      stableId: newStableId,
+      name: `${source.name} (Copy)`,
+      icon: source.icon,
+      sortOrder: maxOrder + 1,
+    });
+
+    questions.sort((a, b) => a.sortOrder - b.sortOrder);
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      await ctx.db.insert("questions", {
+        departmentId: newStableId,
+        riskCategory: q.riskCategory,
+        text: q.text,
+        criteria: q.criteria,
+        answerType: q.answerType,
+        pointsYes: q.pointsYes,
+        pointsPartial: q.pointsPartial,
+        pointsNo: q.pointsNo,
+        sortOrder: i,
+      });
+    }
+    return newStableId;
   },
 });
 

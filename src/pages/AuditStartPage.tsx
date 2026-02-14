@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
-import { ChevronRight, TrendingUp, ClipboardList, CheckCircle2, Clock } from 'lucide-react';
+import { ChevronRight, TrendingUp, ClipboardList, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getScoreColor } from '@/lib/score-colors';
@@ -112,15 +112,17 @@ export function AuditStartPage() {
               0
             );
             const inProgress = inProgressByDept.get(dept.id);
+            const hasQuestions = dept.questions.length > 0;
 
             return (
               <button
                 key={dept.id}
-                onClick={() => navigate(`/audit/${dept.id}`)}
-                className="text-left w-full"
+                onClick={() => hasQuestions && navigate(`/audit/${dept.id}`)}
+                className={`text-left w-full ${!hasQuestions ? 'opacity-60 cursor-not-allowed' : ''}`}
                 aria-label={`Start audit for ${dept.name}`}
+                aria-disabled={!hasQuestions}
               >
-                <Card className="hover:border-primary/40 hover:shadow-sm transition-all group h-full">
+                <Card className={`transition-all group h-full ${hasQuestions ? 'hover:border-primary/40 hover:shadow-sm' : ''}`}>
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -136,7 +138,13 @@ export function AuditStartPage() {
                           <p className="text-xs text-muted-foreground">
                             {dept.questions.length} questions &middot; {maxPts} pts
                           </p>
-                          {inProgress && (
+                          {!hasQuestions && (
+                            <Badge variant="secondary" className="text-[10px] gap-1 mt-0.5 font-normal text-muted-foreground">
+                              <AlertCircle size={10} />
+                              No questions
+                            </Badge>
+                          )}
+                          {hasQuestions && inProgress && (
                             <Badge variant="secondary" className="text-[10px] gap-1 mt-0.5 font-normal text-amber-700 bg-amber-50 border-amber-200">
                               <Clock size={10} />
                               In progress ({inProgress.answered}/{dept.questions.length})

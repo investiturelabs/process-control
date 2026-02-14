@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { getScoreColor } from '@/lib/score-colors';
 import { exportSessionsCsv } from '@/lib/export';
 import { getCompletedSessions, buildDepartmentMap } from '@/lib/session-utils';
+import { track } from '@/lib/analytics';
 import { DATE_RANGE_LABELS, type DateRange } from '@/lib/date-utils';
 
 export function HistoryPage() {
@@ -70,7 +71,7 @@ export function HistoryPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportSessionsCsv(filteredSessions, departments)}
+            onClick={() => { exportSessionsCsv(filteredSessions, departments); track({ name: 'csv_exported', properties: { type: 'sessions' } }); }}
           >
             <Download size={14} className="mr-1.5" />
             Export CSV

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/context';
-import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database } from 'lucide-react';
+import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database, Copy, Upload, Download, HardDrive } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
 import type { Question } from '@/types';
 import { toast } from 'sonner';
@@ -19,10 +19,14 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { QuestionFormDialog } from '@/components/QuestionFormDialog';
+import { QuestionImportDialog } from '@/components/QuestionImportDialog';
 import { DeptIcon, DEPT_ICON_NAMES } from '@/components/DeptIcon';
+import { exportQuestionsCsv } from '@/lib/export';
+import { createBackup, downloadBackup } from '@/lib/backup';
+import { track } from '@/lib/analytics';
 
 export function SettingsPage() {
-  const { company, setCompany, currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, generateTestData } =
+  const { company, setCompany, currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, generateTestData, duplicateDepartment, users, sessions, invitations } =
     useAppStore();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -56,6 +60,12 @@ export function SettingsPage() {
   // Department delete confirmation state
   const [deleteDeptTarget, setDeleteDeptTarget] = useState<{ id: string; name: string; questionCount: number } | null>(null);
 
+  // Duplicate state
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
+  // Import dialog state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+
   const openAddDept = () => {
     setEditingDept(null);
     setDeptName('');
@@ -79,6 +89,7 @@ export function SettingsPage() {
         await updateDepartment(editingDept.id, trimmed, deptIcon);
       } else {
         await addDepartment(trimmed, deptIcon);
+        track({ name: 'department_added', properties: { name: trimmed } });
       }
       setDeptDialogOpen(false);
     } catch {
@@ -92,6 +103,7 @@ export function SettingsPage() {
     if (!deleteDeptTarget) return;
     try {
       await removeDepartment(deleteDeptTarget.id);
+      track({ name: 'department_deleted', properties: { name: deleteDeptTarget.name } });
       setDeleteDeptTarget(null);
     } catch {
       toast.error('Failed to delete department.');
@@ -165,6 +177,7 @@ export function SettingsPage() {
       } else {
         const { id: _, ...rest } = question;
         await addQuestion(rest);
+        track({ name: 'question_added', properties: { departmentId: editingDeptId } });
       }
     } catch {
       toast.error('Failed to save question.');
@@ -176,6 +189,7 @@ export function SettingsPage() {
     if (!deleteTarget) return;
     try {
       await removeQuestion(deleteTarget.questionId);
+      track({ name: 'question_deleted', properties: { departmentId: deleteTarget.deptId } });
       setDeleteTarget(null);
     } catch {
       toast.error('Failed to remove question.');
@@ -263,6 +277,14 @@ export function SettingsPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-sm">Audit questions</CardTitle>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground" onClick={() => { exportQuestionsCsv(departments); track({ name: 'csv_exported', properties: { type: 'questions' } }); }}>
+              <Download size={12} />
+              Export CSV
+            </Button>
+            <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground" onClick={() => setImportDialogOpen(true)}>
+              <Upload size={12} />
+              Import CSV
+            </Button>
             <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground" onClick={openAddDept}>
               <Plus size={12} />
               Add department
@@ -311,6 +333,27 @@ export function SettingsPage() {
                     onClick={(e) => { e.preventDefault(); openEditDept(dept); }}
                   >
                     <Pencil size={12} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={duplicatingId === dept.id}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      setDuplicatingId(dept.id);
+                      try {
+                        await duplicateDepartment(dept.id);
+                        track({ name: 'department_duplicated', properties: { sourceId: dept.id } });
+                        toast.success(`Duplicated "${dept.name}"`);
+                      } catch {
+                        toast.error('Failed to duplicate department.');
+                      } finally {
+                        setDuplicatingId(null);
+                      }
+                    }}
+                  >
+                    <Copy size={12} />
                   </Button>
                   <Button
                     variant="ghost"
@@ -416,6 +459,41 @@ export function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Data backup */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <HardDrive size={16} className="text-muted-foreground" />
+            Data Backup
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Export all company data as JSON. Contains departments, questions, audit history, users, and invitations.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              try {
+                downloadBackup(createBackup({ company, users, departments, sessions, invitations }));
+                track({ name: 'backup_exported', properties: {} });
+                toast.success('Backup exported.');
+              } catch {
+                toast.error('Failed to export backup.');
+              }
+            }}
+          >
+            <Download size={14} />
+            Export backup
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Question import dialog */}
+      <QuestionImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
 
       {/* Question form dialog (add/edit) */}
       <QuestionFormDialog

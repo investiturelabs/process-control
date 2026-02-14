@@ -23,8 +23,13 @@ export function LoginPage() {
     try {
       await login(name.trim(), email.trim().toLowerCase());
       navigate('/');
-    } catch {
-      setError('Failed to sign in. Please try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('deactivated')) {
+        setError('Account deactivated. Contact your administrator.');
+      } else {
+        setError('Failed to sign in. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -48,6 +48,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const createInvitationMutation = useMutation(api.invitations.create);
   const removeInvitationMutation = useMutation(api.invitations.remove);
   const seedAllMutation = useMutation(api.seed.seedAll);
+  const generateTestDataMutation = useMutation(api.testData.generate);
 
   // --- Loading state ---
   const loading =
@@ -234,6 +235,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [removeQuestionMutation],
   );
 
+  const generateTestData = useCallback(async () => {
+    await generateTestDataMutation();
+  }, [generateTestDataMutation]);
+
   const store: Store = {
     currentUser,
     users,
@@ -253,6 +258,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addQuestion,
     updateQuestion,
     removeQuestion,
+    generateTestData,
   };
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;

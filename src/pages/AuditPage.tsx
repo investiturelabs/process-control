@@ -182,15 +182,15 @@ export function AuditPage() {
       {currentQuestion && (
         <Card key={animKey} className="flashcard-enter rounded-2xl shadow-sm overflow-hidden">
           <CardContent className="p-6 pb-4">
-            <h2 className="text-lg font-semibold leading-snug">
+            <h2 className="text-2xl font-semibold leading-snug">
               {currentQuestion.text}
             </h2>
             {currentQuestion.criteria && (
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+              <p className="mt-3 text-base text-muted-foreground leading-relaxed">
                 {currentQuestion.criteria}
               </p>
             )}
-            <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
               <span>Full: {currentQuestion.pointsYes} pts</span>
               {currentQuestion.answerType === 'yes_no_partial' && (
                 <span>Partial: {currentQuestion.pointsPartial} pts</span>

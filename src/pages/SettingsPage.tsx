@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/context';
-import { Building2, Save, RotateCcw, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
 import type { Question } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import {
 import { QuestionFormDialog } from '@/components/QuestionFormDialog';
 
 export function SettingsPage() {
-  const { company, setCompany, currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion } =
+  const { company, setCompany, currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, generateTestData } =
     useAppStore();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -28,6 +28,8 @@ export function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState(company?.logoUrl || '');
   const [saved, setSaved] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [generatingData, setGeneratingData] = useState(false);
+  const [dataGenerated, setDataGenerated] = useState(false);
 
   // Question form dialog state
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
@@ -272,6 +274,36 @@ export function SettingsPage() {
               </details>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Test data */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database size={16} className="text-muted-foreground" />
+            Test Data
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Generate 6 months of sample audit data across all departments to preview charts and analytics.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={generatingData || dataGenerated}
+            onClick={async () => {
+              setGeneratingData(true);
+              await generateTestData();
+              setGeneratingData(false);
+              setDataGenerated(true);
+            }}
+          >
+            <Database size={14} />
+            {generatingData ? 'Generating...' : dataGenerated ? 'Data generated' : 'Generate test data'}
+          </Button>
         </CardContent>
       </Card>
 

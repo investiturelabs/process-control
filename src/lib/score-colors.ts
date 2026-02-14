@@ -1,8 +1,8 @@
 export function getScoreColor(percentage: number) {
-  if (percentage >= 94) return { text: 'text-emerald-600', bg: 'bg-emerald-500', bgLight: 'bg-emerald-50' };
-  if (percentage >= 91) return { text: 'text-primary', bg: 'bg-primary', bgLight: 'bg-primary/10' };
-  if (percentage >= 80) return { text: 'text-amber-600', bg: 'bg-amber-500', bgLight: 'bg-amber-50' };
-  return { text: 'text-red-600', bg: 'bg-red-500', bgLight: 'bg-red-50' };
+  if (percentage >= 94) return { text: 'text-emerald-600', bg: 'bg-emerald-500', bgLight: 'bg-emerald-50', hex: '#059669' };
+  if (percentage >= 91) return { text: 'text-primary', bg: 'bg-primary', bgLight: 'bg-primary/10', hex: '#3b82f6' };
+  if (percentage >= 80) return { text: 'text-amber-600', bg: 'bg-amber-500', bgLight: 'bg-amber-50', hex: '#d97706' };
+  return { text: 'text-red-600', bg: 'bg-red-500', bgLight: 'bg-red-50', hex: '#dc2626' };
 }
 
 export function getGradeLabel(percentage: number) {

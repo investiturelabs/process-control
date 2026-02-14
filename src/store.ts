@@ -19,4 +19,5 @@ export interface Store {
   addQuestion: (question: Omit<Question, 'id'>) => Promise<void>;
   updateQuestion: (question: Question) => Promise<void>;
   removeQuestion: (questionId: string) => Promise<void>;
+  generateTestData: () => Promise<void>;
 }

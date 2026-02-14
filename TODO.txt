@@ -55,13 +55,9 @@ Here's the production readiness TODO list, organized by priority:
   All touch convex/*.ts mutations/queries. Can't do 2-4 without 1 (auth) in place first. Input validation (9) fits naturally since you're already modifying
   every mutation.                                                                                                                                           
                                                                                                                                                             
-  Batch 2: Data Layer (PCT-8, 11, 12)
-  All touch convex/sessions.ts and the session query pipeline. Add the index (8), add pagination to the query (12), and wire up the UI pagination (11) in
-  one pass.
+  Batch 2: Data Layer (PCT-8, 11, 12) - done
 
-  Batch 3: UI Resilience (PCT-5, 6, 10)
-  All about handling edge states in page components. Loading skeletons (5), empty questions (6), and orphaned audits from deleted departments (10) are all
-  "what happens when data isn't what we expect" fixes.
+  Batch 3: UI Resilience (PCT-5, 6, 10) - done
 
   Batch 4: Invitations (PCT-13, 26)
   Both touch convex/invitations.ts and the invitation UI. Build the acceptance flow (13) and add expiration (26) together.
@@ -70,11 +66,9 @@ Here's the production readiness TODO list, organized by priority:
   All deployment/config concerns. Sentry (7), env validation (16), CSP headers (17), and the hardcoded base path (27) can all be addressed in one infra
   pass.
 
-  Batch 6: UX Polish (PCT-18, 19, 21)
-  Keyboard nav (18), mobile charts (19), and settings search (21) are independent UI improvements but can be done in a single "polish" sprint.
+  Batch 6: UX Polish (PCT-18, 19, 21) - done
 
   Batch 7: Data Integrity (PCT-14, 20)
   Audit trail (14) and question versioning (20) both deal with preserving history of changes.
 
-  Batch 8: Feature Backlog (PCT-15, 22, 23, 24, 25, 28)
-  Lower priority features that are mostly independent. Tests (15) could go earlier if you want.
+  Batch 8: Feature Backlog (PCT-15, 22, 23, 24, 25, 28) - done

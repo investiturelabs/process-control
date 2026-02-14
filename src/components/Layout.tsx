@@ -1,0 +1,136 @@
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useAppStore } from '@/context';
+import {
+  LayoutDashboard,
+  History,
+  Settings,
+  Users,
+  LogOut,
+  ClipboardCheck,
+  Menu,
+  X,
+} from 'lucide-react';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
+
+const navItems = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/history', icon: History, label: 'History' },
+  { to: '/team', icon: Users, label: 'Team' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
+];
+
+export function Layout() {
+  const { currentUser, company, logout } = useAppStore();
+  const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <header className="bg-card border-b border-border sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden h-8 w-8"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
+              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <ClipboardCheck size={18} className="text-primary-foreground" />
+              </div>
+              <span className="font-semibold text-sm">
+                {company?.name || 'Process + Control'}
+              </span>
+            </div>
+          </div>
+
+          <nav className="hidden md:flex items-center gap-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`
+                }
+              >
+                <item.icon size={16} />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Avatar className="h-7 w-7">
+                <AvatarFallback
+                  style={{ backgroundColor: currentUser?.avatarColor }}
+                  className="text-white text-xs font-semibold"
+                >
+                  {currentUser?.name?.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:block text-sm text-muted-foreground">
+                {currentUser?.name}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={handleLogout}
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </Button>
+          </div>
+        </div>
+
+        {mobileOpen && (
+          <>
+            <Separator />
+            <div className="md:hidden bg-card px-4 pb-3 pt-2">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium ${
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-accent'
+                    }`
+                  }
+                >
+                  <item.icon size={16} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </>
+        )}
+      </header>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+        <Outlet />
+      </main>
+    </div>
+  );
+}

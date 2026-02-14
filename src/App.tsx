@@ -3,6 +3,7 @@ import { StoreProvider, useAppStore } from '@/context';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AuditPage } from '@/pages/AuditPage';
+import { AuditStartPage } from '@/pages/AuditStartPage';
 import { ResultsPage } from '@/pages/ResultsPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -34,6 +35,7 @@ function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="audit" element={<AuditStartPage />} />
         <Route path="audit/:departmentId" element={<AuditPage />} />
         <Route path="results/:sessionId" element={<ResultsPage />} />
         <Route path="history" element={<HistoryPage />} />

@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/audit', icon: ClipboardCheck, label: 'Audit' },
   { to: '/history', icon: History, label: 'History' },
   { to: '/team', icon: Users, label: 'Team' },
   { to: '/settings', icon: Settings, label: 'Settings' },
@@ -60,7 +61,7 @@ export function Layout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/'}
+                end={item.to === '/' || item.to === '/audit'}
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
@@ -109,7 +110,7 @@ export function Layout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/'}
+                  end={item.to === '/' || item.to === '/audit'}
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium ${

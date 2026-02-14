@@ -52,14 +52,6 @@ function getDateCutoff(range: DateRange): Date | null {
   }
 }
 
-const DATE_RANGE_LABELS: Record<DateRange, string> = {
-  '30d': '30 days',
-  '90d': '90 days',
-  '6m': '6 months',
-  '1y': '1 year',
-  'all': 'All time',
-};
-
 export function DashboardPage() {
   const { sessions, departments, currentUser } = useAppStore();
   const navigate = useNavigate();

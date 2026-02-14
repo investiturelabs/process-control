@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { StoreProvider, useAppStore } from '@/context';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -46,10 +46,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <HashRouter>
+    <BrowserRouter basename="/process-control">
       <StoreProvider>
         <AppRoutes />
       </StoreProvider>
-    </HashRouter>
+    </BrowserRouter>
   );
 }

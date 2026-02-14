@@ -38,19 +38,44 @@ const DEPT_COLORS = [
   '#8b5cf6', '#06b6d4', '#6366f1', '#ec4899',
 ];
 
+type DateRange = '30d' | '90d' | '6m' | '1y' | 'all';
+
+function getDateCutoff(range: DateRange): Date | null {
+  if (range === 'all') return null;
+  const now = new Date();
+  switch (range) {
+    case '30d': return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    case '90d': return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 90);
+    case '6m': return new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+    case '1y': return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  }
+}
+
+const DATE_RANGE_LABELS: Record<DateRange, string> = {
+  '30d': '30 days',
+  '90d': '90 days',
+  '6m': '6 months',
+  '1y': '1 year',
+  'all': 'All time',
+};
+
 export function HistoryPage() {
   const { sessions, departments } = useAppStore();
   const navigate = useNavigate();
   const [filterDept, setFilterDept] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange>('all');
   const [activeTab, setActiveTab] = useState<'charts' | 'list'>('charts');
 
-  const completedSessions = useMemo(
-    () =>
-      sessions
-        .filter((s) => s.completed)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [sessions],
-  );
+  const completedSessions = useMemo(() => {
+    const cutoff = getDateCutoff(dateRange);
+    return sessions
+      .filter((s) => {
+        if (!s.completed) return false;
+        if (cutoff && new Date(s.date) < cutoff) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [sessions, dateRange]);
 
   const filteredSessions =
     filterDept === 'all'
@@ -232,10 +257,28 @@ export function HistoryPage() {
         <div>
           <h1 className="text-xl font-bold">Audit History</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {completedSessions.length} completed audits
+            {completedSessions.length} audits
+            {dateRange !== 'all' && <> in last {DATE_RANGE_LABELS[dateRange]}</>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date range pills */}
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            {(['30d', '90d', '6m', '1y', 'all'] as DateRange[]).map((range) => (
+              <button
+                key={range}
+                onClick={() => setDateRange(range)}
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  dateRange === range
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-accent'
+                }`}
+              >
+                {range === 'all' ? 'All' : range}
+              </button>
+            ))}
+          </div>
+          {/* View toggle */}
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button
               onClick={() => setActiveTab('charts')}

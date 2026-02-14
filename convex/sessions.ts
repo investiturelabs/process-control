@@ -1,10 +1,35 @@
 import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 export const list = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("auditSessions").collect();
+  },
+});
+
+export const listPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    departmentId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let q;
+    if (args.departmentId) {
+      q = ctx.db
+        .query("auditSessions")
+        .withIndex("by_completed_departmentId", (q_) =>
+          q_.eq("completed", true).eq("departmentId", args.departmentId!)
+        );
+    } else {
+      q = ctx.db
+        .query("auditSessions")
+        .withIndex("by_completed_departmentId", (q_) =>
+          q_.eq("completed", true)
+        );
+    }
+    return await q.order("desc").paginate(args.paginationOpts);
   },
 });
 

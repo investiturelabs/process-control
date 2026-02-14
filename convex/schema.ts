@@ -59,7 +59,9 @@ export default defineSchema({
     maxPoints: v.number(),
     percentage: v.number(),
     completed: v.boolean(),
-  }).index("by_departmentId", ["departmentId"]),
+  }).index("by_departmentId", ["departmentId"])
+    .index("by_auditorId", ["auditorId"])
+    .index("by_completed_departmentId", ["completed", "departmentId"]),
 
   invitations: defineTable({
     email: v.string(),

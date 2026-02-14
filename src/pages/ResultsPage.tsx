@@ -10,11 +10,13 @@ import {
   MinusCircle,
   Trophy,
   TrendingUp,
+  Download,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { getScoreColor, getGradeLabel } from '@/lib/score-colors';
+import { exportSingleAuditCsv } from '@/lib/export';
 
 export function ResultsPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -82,19 +84,29 @@ export function ResultsPage() {
   return (
     <div className="max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => navigate('/')}
-        >
-          <ArrowLeft size={18} />
-        </Button>
-        <div className="flex items-center gap-2">
-          <DeptIcon name={dept.icon} size={18} className="text-muted-foreground" />
-          <h1 className="font-semibold">{dept.name} — Audit Results</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => navigate('/')}
+          >
+            <ArrowLeft size={18} />
+          </Button>
+          <div className="flex items-center gap-2">
+            <DeptIcon name={dept.icon} size={18} className="text-muted-foreground" />
+            <h1 className="font-semibold">{dept.name} — Audit Results</h1>
+          </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => exportSingleAuditCsv(session, dept)}
+        >
+          <Download size={14} className="mr-1.5" />
+          Export
+        </Button>
       </div>
 
       {/* Score hero */}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
-import { ChevronRight, BarChart3, TrendingUp, Target, Calendar } from 'lucide-react';
+import { ChevronRight, BarChart3, TrendingUp, Target, Calendar, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getScoreColor } from '@/lib/score-colors';
+import { exportSessionsCsv } from '@/lib/export';
 import {
   ResponsiveContainer,
   LineChart,
@@ -314,6 +315,14 @@ export function HistoryPage() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportSessionsCsv(filteredSessions, departments)}
+          >
+            <Download size={14} className="mr-1.5" />
+            Export CSV
+          </Button>
         </div>
       </div>
 

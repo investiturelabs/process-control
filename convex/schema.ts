@@ -29,7 +29,6 @@ export default defineSchema({
     answerType: v.union(
       v.literal("yes_no"),
       v.literal("yes_no_partial"),
-      v.literal("yes_no_na"),
     ),
     pointsYes: v.number(),
     pointsPartial: v.number(),
@@ -50,7 +49,6 @@ export default defineSchema({
           v.literal("yes"),
           v.literal("no"),
           v.literal("partial"),
-          v.literal("na"),
           v.null(),
         ),
         points: v.number(),

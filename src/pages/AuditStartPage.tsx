@@ -1,34 +1,52 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
-import { ChevronRight, TrendingUp, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, TrendingUp, ClipboardList, CheckCircle2, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { getScoreColor } from '@/lib/score-colors';
+import { averagePercentage } from '@/lib/session-utils';
+import { getFirstName } from '@/lib/utils';
 
 export function AuditStartPage() {
   const { departments, sessions, currentUser } = useAppStore();
   const navigate = useNavigate();
 
-  const completedSessions = sessions.filter((s) => s.completed);
-
-  const totalQuestions = departments.reduce(
-    (acc, d) => acc + d.questions.length,
-    0
+  const completedSessions = useMemo(
+    () => sessions
+      .filter((s) => s.completed)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [sessions]
   );
 
-  const avgScore =
-    completedSessions.length > 0
-      ? Math.round(
-          completedSessions.reduce((acc, s) => acc + s.percentage, 0) /
-            completedSessions.length
-        )
-      : null;
+  // In-progress sessions for the current user, keyed by departmentId
+  const inProgressByDept = useMemo(() => {
+    if (!currentUser) return new Map<string, { answered: number }>();
+    const map = new Map<string, { answered: number }>();
+    for (const s of sessions) {
+      if (!s.completed && s.auditorId === currentUser.id) {
+        map.set(s.departmentId, { answered: s.answers.length });
+      }
+    }
+    return map;
+  }, [sessions, currentUser]);
+
+  const totalQuestions = useMemo(
+    () => departments.reduce((acc, d) => acc + d.questions.length, 0),
+    [departments]
+  );
+
+  const avgScore = useMemo(() => {
+    const avg = averagePercentage(completedSessions);
+    return completedSessions.length > 0 ? avg : null;
+  }, [completedSessions]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold">
-          Welcome back, {currentUser?.name?.split(' ')[0]}
+          Welcome back, {getFirstName(currentUser)}
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Start a new audit or review past scores
@@ -93,12 +111,14 @@ export function AuditStartPage() {
               (acc, q) => acc + q.pointsYes,
               0
             );
+            const inProgress = inProgressByDept.get(dept.id);
 
             return (
               <button
                 key={dept.id}
                 onClick={() => navigate(`/audit/${dept.id}`)}
                 className="text-left w-full"
+                aria-label={`Start audit for ${dept.name}`}
               >
                 <Card className="hover:border-primary/40 hover:shadow-sm transition-all group h-full">
                   <CardContent className="p-4">
@@ -116,6 +136,12 @@ export function AuditStartPage() {
                           <p className="text-xs text-muted-foreground">
                             {dept.questions.length} questions &middot; {maxPts} pts
                           </p>
+                          {inProgress && (
+                            <Badge variant="secondary" className="text-[10px] gap-1 mt-0.5 font-normal text-amber-700 bg-amber-50 border-amber-200">
+                              <Clock size={10} />
+                              In progress ({inProgress.answered}/{dept.questions.length})
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <ChevronRight

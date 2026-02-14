@@ -1,5 +1,6 @@
 import type { Department, Question, AnswerType } from './types';
-import { v4 as uuid } from 'uuid';
+
+let questionCounter = 0;
 
 function q(
   departmentId: string,
@@ -11,7 +12,7 @@ function q(
   pointsPartial?: number
 ): Question {
   return {
-    id: uuid(),
+    id: `seed-q-${questionCounter++}`,
     departmentId,
     riskCategory,
     text,

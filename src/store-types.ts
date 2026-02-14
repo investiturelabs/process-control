@@ -19,5 +19,10 @@ export interface Store {
   addQuestion: (question: Omit<Question, 'id'>) => Promise<void>;
   updateQuestion: (question: Question) => Promise<void>;
   removeQuestion: (questionId: string) => Promise<void>;
+  addDepartment: (name: string, icon: string) => Promise<string>;
+  updateDepartment: (stableId: string, name: string, icon: string) => Promise<void>;
+  removeDepartment: (stableId: string) => Promise<void>;
+  updateSession: (sessionId: string, data: Partial<Omit<AuditSession, 'id'>>) => Promise<void>;
+  removeSession: (sessionId: string) => Promise<void>;
   generateTestData: () => Promise<void>;
 }

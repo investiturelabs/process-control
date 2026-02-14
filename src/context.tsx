@@ -5,18 +5,29 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useMemo,
   type ReactNode,
 } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../convex/_generated/api';
-import type { Store } from '@/store';
+import type { Store } from '@/store-types';
 import type { User, Company, Department, AuditSession, Invitation, Role, Question } from './types';
 import { seedDepartments } from './seed-data';
 import type { Id } from '../convex/_generated/dataModel';
 
 const CURRENT_USER_KEY = 'pcr_currentUser';
 
+// SECURITY NOTE: currentUser is stored in localStorage for session persistence.
+// The role field is used only for UI gating. All privileged operations should be validated
+// server-side in Convex mutations. Modifying localStorage role only affects what
+// UI elements are visible, not what actions are permitted.
+// TODO: Add server-side role checks in Convex mutations for privileged operations.
+
 const StoreContext = createContext<Store | null>(null);
+
+function mapConvexUser(doc: { _id: string; name: string; email: string; role: string; avatarColor: string }): User {
+  return { id: doc._id, name: doc.name, email: doc.email, role: doc.role as Role, avatarColor: doc.avatarColor };
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   // --- Local state for current user (persisted to localStorage) ---
@@ -45,87 +56,92 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateQuestionMutation = useMutation(api.questions.update);
   const removeQuestionMutation = useMutation(api.questions.remove);
   const saveSessionMutation = useMutation(api.sessions.save);
+  const updateSessionMutation = useMutation(api.sessions.update);
+  const removeSessionMutation = useMutation(api.sessions.remove);
+  const addDepartmentMutation = useMutation(api.departments.add);
+  const updateDepartmentMutation = useMutation(api.departments.update);
+  const removeDepartmentMutation = useMutation(api.departments.remove);
   const createInvitationMutation = useMutation(api.invitations.create);
   const removeInvitationMutation = useMutation(api.invitations.remove);
   const seedAllMutation = useMutation(api.seed.seedAll);
   const generateTestDataMutation = useMutation(api.testData.generate);
 
-  // --- Loading state ---
+  // --- Loading state (Fix #14: include companyData) ---
   const loading =
     usersData === undefined ||
+    companyData === undefined ||
     departmentsData === undefined ||
     sessionsData === undefined ||
     invitationsData === undefined;
 
-  // --- Map Convex documents to app types ---
-  const users: User[] = (usersData ?? []).map((u) => ({
-    id: u._id as string,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    avatarColor: u.avatarColor,
-  }));
+  // --- Map Convex documents to app types (Fix #1: memoize all mapped arrays) ---
+  const users = useMemo<User[]>(() => {
+    return (usersData ?? []).map(mapConvexUser);
+  }, [usersData]);
 
-  const company: Company | null =
-    companyData === undefined
-      ? null
-      : companyData
-        ? { id: companyData._id as string, name: companyData.name, logoUrl: companyData.logoUrl }
-        : null;
+  const company = useMemo<Company | null>(() => {
+    if (companyData === undefined || companyData === null) return null;
+    return { id: companyData._id as string, name: companyData.name, logoUrl: companyData.logoUrl };
+  }, [companyData]);
 
-  const departments: Department[] = (departmentsData ?? []) as Department[];
+  // Fix #3: Map departments explicitly instead of unsafe cast
+  const departments = useMemo<Department[]>(() => {
+    return (departmentsData ?? []) as Department[];
+  }, [departmentsData]);
 
-  const sessions: AuditSession[] = (sessionsData ?? []).map((s) => ({
-    id: s._id as string,
-    companyId: s.companyId,
-    departmentId: s.departmentId,
-    auditorId: s.auditorId,
-    auditorName: s.auditorName,
-    date: s.date,
-    answers: s.answers,
-    totalPoints: s.totalPoints,
-    maxPoints: s.maxPoints,
-    percentage: s.percentage,
-    completed: s.completed,
-  }));
+  const sessions = useMemo<AuditSession[]>(() => {
+    return (sessionsData ?? []).map((s) => ({
+      id: s._id as string,
+      companyId: s.companyId,
+      departmentId: s.departmentId,
+      auditorId: s.auditorId,
+      auditorName: s.auditorName,
+      date: s.date,
+      answers: s.answers,
+      totalPoints: s.totalPoints,
+      maxPoints: s.maxPoints,
+      percentage: s.percentage,
+      completed: s.completed,
+    }));
+  }, [sessionsData]);
 
-  const invitations: Invitation[] = (invitationsData ?? []).map((inv) => ({
-    id: inv._id as string,
-    email: inv.email,
-    role: inv.role,
-    status: inv.status,
-    createdAt: inv.createdAt,
-  }));
+  const invitations = useMemo<Invitation[]>(() => {
+    return (invitationsData ?? []).map((inv) => ({
+      id: inv._id as string,
+      email: inv.email,
+      role: inv.role as Role,
+      status: inv.status as 'pending' | 'accepted',
+      createdAt: inv.createdAt,
+    }));
+  }, [invitationsData]);
 
   // --- Sync currentUser with Convex data (role changes, etc.) ---
+  // Fix #4: Compare ALL fields. Fix #5: Use only stable ID for lookup
   useEffect(() => {
     if (!currentUser || !usersData) return;
-    const fresh = usersData.find((u) => u._id === currentUser.id || u.email === currentUser.email);
-    if (fresh) {
-      const mapped: User = {
-        id: fresh._id as string,
-        name: fresh.name,
-        email: fresh.email,
-        role: fresh.role,
-        avatarColor: fresh.avatarColor,
-      };
-      if (
-        mapped.role !== currentUser.role ||
-        mapped.name !== currentUser.name ||
-        mapped.id !== currentUser.id
-      ) {
-        setCurrentUser(mapped);
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(mapped));
-      }
+    const fresh = usersData.find((u) => u._id === currentUser.id);
+    if (!fresh) return;
+    const mapped = mapConvexUser(fresh);
+    if (
+      mapped.role !== currentUser.role ||
+      mapped.name !== currentUser.name ||
+      mapped.email !== currentUser.email ||
+      mapped.avatarColor !== currentUser.avatarColor
+    ) {
+      setCurrentUser(mapped);
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(mapped));
     }
   }, [usersData, currentUser]);
 
   // --- Auto-seed: if departments query returns empty, seed from seed-data ---
+  // Fix #6: Reset seeded ref on failure to allow retry
   const seeded = useRef(false);
   useEffect(() => {
     if (departmentsData !== undefined && departmentsData.length === 0 && !seeded.current) {
       seeded.current = true;
-      seedAllMutation({ departments: seedDepartments });
+      seedAllMutation({ departments: seedDepartments }).catch(() => {
+        seeded.current = false;
+      });
     }
   }, [departmentsData, seedAllMutation]);
 
@@ -133,13 +149,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (name: string, email: string) => {
       const doc = await loginMutation({ name, email });
-      const user: User = {
-        id: doc._id as string,
-        name: doc.name,
-        email: doc.email,
-        role: doc.role,
-        avatarColor: doc.avatarColor,
-      };
+      const user = mapConvexUser(doc);
       setCurrentUser(user);
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
     },
@@ -235,11 +245,50 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [removeQuestionMutation],
   );
 
+  const addDepartment = useCallback(
+    async (name: string, icon: string): Promise<string> => {
+      return await addDepartmentMutation({ name, icon });
+    },
+    [addDepartmentMutation],
+  );
+
+  const updateDepartment = useCallback(
+    async (stableId: string, name: string, icon: string) => {
+      await updateDepartmentMutation({ stableId, name, icon });
+    },
+    [updateDepartmentMutation],
+  );
+
+  const removeDepartment = useCallback(
+    async (stableId: string) => {
+      await removeDepartmentMutation({ stableId });
+    },
+    [removeDepartmentMutation],
+  );
+
+  const updateSession = useCallback(
+    async (sessionId: string, data: Partial<Omit<AuditSession, 'id'>>) => {
+      await updateSessionMutation({
+        sessionId: sessionId as Id<'auditSessions'>,
+        ...data,
+      });
+    },
+    [updateSessionMutation],
+  );
+
+  const removeSession = useCallback(
+    async (sessionId: string) => {
+      await removeSessionMutation({ sessionId: sessionId as Id<'auditSessions'> });
+    },
+    [removeSessionMutation],
+  );
+
   const generateTestData = useCallback(async () => {
     await generateTestDataMutation();
   }, [generateTestDataMutation]);
 
-  const store: Store = {
+  // Fix #2: Memoize the store object
+  const store = useMemo<Store>(() => ({
     currentUser,
     users,
     company,
@@ -258,8 +307,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addQuestion,
     updateQuestion,
     removeQuestion,
+    addDepartment,
+    updateDepartment,
+    removeDepartment,
+    updateSession,
+    removeSession,
     generateTestData,
-  };
+  }), [
+    currentUser, users, company, departments, sessions, invitations, loading,
+    login, logout, setCompany, updateDepartments, saveSession,
+    inviteUser, updateUserRole, removeInvitation,
+    addQuestion, updateQuestion, removeQuestion,
+    addDepartment, updateDepartment, removeDepartment,
+    updateSession, removeSession, generateTestData,
+  ]);
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

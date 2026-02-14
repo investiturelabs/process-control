@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '@/context';
+import { toast } from 'sonner';
 import {
   UserPlus,
   Shield,
@@ -35,15 +36,48 @@ export function TeamPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('user');
   const [showInviteForm, setShowInviteForm] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === 'admin';
 
-  const handleInvite = (e: React.FormEvent) => {
+  // Fix #17 + #35: Await inviteUser with duplicate check
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
-    inviteUser(inviteEmail.trim().toLowerCase(), inviteRole);
-    setInviteEmail('');
-    setShowInviteForm(false);
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) return;
+
+    // Fix #35: Check for duplicates
+    if (users.some(u => u.email === email)) {
+      setInviteError('This email is already a team member.');
+      return;
+    }
+    if (invitations.some(i => i.email === email && i.status === 'pending')) {
+      setInviteError('An invitation is already pending for this email.');
+      return;
+    }
+
+    setInviteError(null);
+    setIsInviting(true);
+    try {
+      await inviteUser(email, inviteRole);
+      setInviteEmail('');
+      setInviteRole('user');
+    } catch {
+      toast.error('Failed to send invitation.');
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  // Fix #33/#49: Validate role before calling updateUserRole
+  const handleRoleChange = async (userId: string, value: string) => {
+    if (value !== 'admin' && value !== 'user') return;
+    try {
+      await updateUserRole(userId, value);
+    } catch {
+      toast.error('Failed to update role.');
+    }
   };
 
   return (
@@ -74,12 +108,12 @@ export function TeamPage() {
               <Input
                 type="email"
                 value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
+                onChange={(e) => { setInviteEmail(e.target.value); setInviteError(null); }}
                 placeholder="email@company.com"
                 className="flex-1"
                 required
               />
-              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as Role)}>
+              <Select value={inviteRole} onValueChange={(v) => { if (v === 'admin' || v === 'user') setInviteRole(v); }}>
                 <SelectTrigger className="w-[100px]">
                   <SelectValue />
                 </SelectTrigger>
@@ -88,8 +122,13 @@ export function TeamPage() {
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
-              <Button type="submit">Send</Button>
+              <Button type="submit" disabled={isInviting}>
+                {isInviting ? 'Sending...' : 'Send'}
+              </Button>
             </form>
+            {inviteError && (
+              <p className="text-sm text-red-600 mt-2" role="alert">{inviteError}</p>
+            )}
             <p className="text-xs text-muted-foreground mt-2">
               They can sign in with this email to join your team.
             </p>
@@ -129,7 +168,7 @@ export function TeamPage() {
                 {isAdmin && user.id !== currentUser?.id ? (
                   <Select
                     value={user.role}
-                    onValueChange={(v) => updateUserRole(user.id, v as Role)}
+                    onValueChange={(v) => handleRoleChange(user.id, v)}
                   >
                     <SelectTrigger className="w-[90px] h-8 text-xs">
                       <SelectValue />
@@ -190,8 +229,16 @@ export function TeamPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => removeInvitation(inv.id)}
+                    className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                    aria-label={`Remove invitation for ${inv.email}`}
+                    onClick={async () => {
+                      if (!window.confirm(`Remove invitation for ${inv.email}?`)) return;
+                      try {
+                        await removeInvitation(inv.id);
+                      } catch {
+                        toast.error('Failed to remove invitation.');
+                      }
+                    }}
                   >
                     <Trash2 size={14} />
                   </Button>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Question, AnswerType } from '@/types';
 import { v4 as uuid } from 'uuid';
 import {
@@ -47,26 +47,33 @@ export function QuestionFormDialog({
   const [pointsYes, setPointsYes] = useState(5);
   const [pointsPartial, setPointsPartial] = useState(3);
 
-  // Reset form when dialog opens or question changes
+  // Fix #15: Use ref to track initialization instead of existingCategories in deps
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    if (open) {
-      if (question) {
-        setText(question.text);
-        setCriteria(question.criteria);
-        setRiskCategory(question.riskCategory);
-        setCustomCategory('');
-        setAnswerType(question.answerType);
-        setPointsYes(question.pointsYes);
-        setPointsPartial(question.pointsPartial);
-      } else {
-        setText('');
-        setCriteria('');
-        setRiskCategory(existingCategories[0] || '');
-        setCustomCategory('');
-        setAnswerType('yes_no');
-        setPointsYes(5);
-        setPointsPartial(3);
-      }
+    if (!open) {
+      initializedRef.current = false;
+      return;
+    }
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    if (question) {
+      setText(question.text);
+      setCriteria(question.criteria);
+      setRiskCategory(question.riskCategory);
+      setCustomCategory('');
+      setAnswerType(question.answerType);
+      setPointsYes(question.pointsYes);
+      setPointsPartial(question.pointsPartial);
+    } else {
+      setText('');
+      setCriteria('');
+      setRiskCategory(existingCategories[0] || '');
+      setCustomCategory('');
+      setAnswerType('yes_no');
+      setPointsYes(5);
+      setPointsPartial(3);
     }
   }, [open, question, existingCategories]);
 
@@ -139,9 +146,9 @@ export function QuestionFormDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Risk category *</Label>
+              <Label htmlFor="risk-category">Risk category *</Label>
               <Select value={riskCategory} onValueChange={setRiskCategory}>
-                <SelectTrigger>
+                <SelectTrigger id="risk-category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,12 +172,15 @@ export function QuestionFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Answer type</Label>
+              <Label htmlFor="answer-type">Answer type</Label>
               <Select
                 value={answerType}
-                onValueChange={(v) => setAnswerType(v as AnswerType)}
+                onValueChange={(v) => {
+                  // Fix #50: Validate answerType before setting
+                  if (v === 'yes_no' || v === 'yes_no_partial') setAnswerType(v);
+                }}
               >
-                <SelectTrigger>
+                <SelectTrigger id="answer-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -191,7 +201,11 @@ export function QuestionFormDialog({
                 type="number"
                 min={0}
                 value={pointsYes}
-                onChange={(e) => setPointsYes(Number(e.target.value))}
+                onChange={(e) => {
+                  // Fix #14: Validate points input
+                  const parsed = parseInt(e.target.value, 10);
+                  setPointsYes(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
+                }}
               />
             </div>
             {answerType === 'yes_no_partial' && (
@@ -202,7 +216,10 @@ export function QuestionFormDialog({
                   type="number"
                   min={0}
                   value={pointsPartial}
-                  onChange={(e) => setPointsPartial(Number(e.target.value))}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    setPointsPartial(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
+                  }}
                 />
               </div>
             )}

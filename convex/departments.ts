@@ -16,7 +16,6 @@ const departmentsValidator = v.array(
         answerType: v.union(
           v.literal("yes_no"),
           v.literal("yes_no_partial"),
-          v.literal("yes_no_na"),
         ),
         pointsYes: v.number(),
         pointsPartial: v.number(),
@@ -53,6 +52,66 @@ export const listWithQuestions = query({
           pointsNo: q.pointsNo,
         })),
     }));
+  },
+});
+
+export const add = mutation({
+  args: {
+    name: v.string(),
+    icon: v.string(),
+  },
+  handler: async (ctx, { name, icon }) => {
+    const existing = await ctx.db.query("departments").collect();
+    const maxOrder = existing.reduce((max, d) => Math.max(max, d.sortOrder), -1);
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const stableId = `dept-${slug}-${Date.now()}`;
+    await ctx.db.insert("departments", {
+      stableId,
+      name,
+      icon,
+      sortOrder: maxOrder + 1,
+    });
+    return stableId;
+  },
+});
+
+export const update = mutation({
+  args: {
+    stableId: v.string(),
+    name: v.string(),
+    icon: v.string(),
+  },
+  handler: async (ctx, { stableId, name, icon }) => {
+    const dept = await ctx.db
+      .query("departments")
+      .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
+      .unique();
+    if (!dept) throw new Error("Department not found");
+    await ctx.db.patch(dept._id, { name, icon });
+  },
+});
+
+export const remove = mutation({
+  args: {
+    stableId: v.string(),
+  },
+  handler: async (ctx, { stableId }) => {
+    const dept = await ctx.db
+      .query("departments")
+      .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
+      .unique();
+    if (!dept) throw new Error("Department not found");
+
+    // Delete all questions belonging to this department
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .collect();
+    for (const q of questions) {
+      await ctx.db.delete(q._id);
+    }
+
+    await ctx.db.delete(dept._id);
   },
 });
 

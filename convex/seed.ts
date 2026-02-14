@@ -18,7 +18,6 @@ export const seedAll = mutation({
             answerType: v.union(
               v.literal("yes_no"),
               v.literal("yes_no_partial"),
-              v.literal("yes_no_na"),
             ),
             pointsYes: v.number(),
             pointsPartial: v.number(),

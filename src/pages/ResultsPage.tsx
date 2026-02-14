@@ -91,6 +91,7 @@ export function ResultsPage() {
             size="icon"
             className="h-8 w-8"
             onClick={() => navigate('/')}
+            aria-label="Back to dashboard"
           >
             <ArrowLeft size={18} />
           </Button>
@@ -114,7 +115,7 @@ export function ResultsPage() {
         <CardContent className="p-6">
           <div className="flex justify-center mb-3">
             <div className={`w-16 h-16 rounded-2xl ${scoreColor.bgLight} flex items-center justify-center`}>
-              {session.percentage >= 91 ? (
+              {session.percentage >= 94 ? (
                 <Trophy size={28} className={scoreColor.text} />
               ) : (
                 <TrendingUp size={28} className={scoreColor.text} />
@@ -163,8 +164,8 @@ export function ResultsPage() {
               </CardHeader>
               <Separator />
               <CardContent className="p-0 divide-y divide-border/50">
-                {cat.questions.map((q, i) => (
-                  <div key={i} className="px-4 py-2.5 flex items-start gap-3">
+                {cat.questions.map((q) => (
+                  <div key={q.text} className="px-4 py-2.5 flex items-start gap-3">
                     <div className="mt-0.5">
                       {q.value === 'yes' && (
                         <CheckCircle2 size={16} className="text-emerald-500" />

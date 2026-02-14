@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
 import type { Answer, AnswerValue, Question } from '@/types';
+import { toast } from 'sonner';
 import {
   CheckCircle2,
   XCircle,
@@ -20,9 +21,17 @@ import { Separator } from '@/components/ui/separator';
 export function AuditPage() {
   const { departmentId } = useParams<{ departmentId: string }>();
   const navigate = useNavigate();
-  const { departments, currentUser, saveSession, company } = useAppStore();
+  const { departments, currentUser, sessions, saveSession, updateSession, company } = useAppStore();
 
   const dept = departments.find((d) => d.id === departmentId);
+
+  // Find existing in-progress session for this department + user
+  const existingSession = useMemo(() => {
+    if (!departmentId || !currentUser) return null;
+    return sessions.find(
+      (s) => s.departmentId === departmentId && s.auditorId === currentUser.id && !s.completed
+    ) ?? null;
+  }, [sessions, departmentId, currentUser]);
 
   const categories = useMemo(() => {
     if (!dept) return [];
@@ -43,9 +52,89 @@ export function AuditPage() {
     [categories]
   );
 
+  // Initialize from existing session if resuming
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Map<string, Answer>>(new Map());
   const [animKey, setAnimKey] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const initialized = useRef(false);
+
+  // Resume from existing session on mount
+  useEffect(() => {
+    if (initialized.current || !existingSession || allQuestions.length === 0) return;
+    initialized.current = true;
+
+    setSessionId(existingSession.id);
+    const restoredAnswers = new Map<string, Answer>();
+    for (const a of existingSession.answers) {
+      restoredAnswers.set(a.questionId, a);
+    }
+    setAnswers(restoredAnswers);
+
+    // Position at the first unanswered question
+    const firstUnanswered = allQuestions.findIndex((q) => !restoredAnswers.has(q.id));
+    if (firstUnanswered >= 0) {
+      setCurrentIndex(firstUnanswered);
+    } else {
+      // All answered — go to last question
+      setCurrentIndex(allQuestions.length - 1);
+    }
+  }, [existingSession, allQuestions]);
+
+  // Debounced auto-save
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
+  const autoSave = useCallback(() => {
+    if (!dept || !currentUser) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const currentAnswers = Array.from(answersRef.current.values());
+      if (currentAnswers.length === 0) return;
+
+      const maxPoints = allQuestions.reduce((acc, q) => acc + q.pointsYes, 0);
+      const earnedPoints = currentAnswers.reduce((acc, a) => acc + a.points, 0);
+      const pct = maxPoints > 0 ? Math.round((earnedPoints / maxPoints) * 100) : 0;
+
+      try {
+        if (sessionIdRef.current) {
+          await updateSession(sessionIdRef.current, {
+            answers: currentAnswers,
+            totalPoints: earnedPoints,
+            maxPoints,
+            percentage: pct,
+            date: new Date().toISOString(),
+          });
+        } else {
+          const id = await saveSession({
+            companyId: company?.id ?? '',
+            departmentId: dept.id,
+            auditorId: currentUser.id,
+            auditorName: currentUser.name,
+            date: new Date().toISOString(),
+            answers: currentAnswers,
+            totalPoints: earnedPoints,
+            maxPoints,
+            percentage: pct,
+            completed: false,
+          });
+          setSessionId(id);
+          sessionIdRef.current = id;
+        }
+      } catch {
+        // Silent — auto-save failure shouldn't interrupt the audit
+      }
+    }, 1500);
+  }, [dept, currentUser, allQuestions, company, saveSession, updateSession]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(saveTimer.current);
+  }, []);
 
   const currentQuestion = allQuestions[currentIndex];
   const totalQuestions = allQuestions.length;
@@ -80,14 +169,20 @@ export function AuditPage() {
         return next;
       });
 
+      // Trigger auto-save
+      autoSave();
+
       setTimeout(() => {
-        if (currentIndex < totalQuestions - 1) {
-          setCurrentIndex((i) => i + 1);
-          setAnimKey((k) => k + 1);
-        }
+        setCurrentIndex((i) => {
+          if (i < totalQuestions - 1) {
+            setAnimKey((k) => k + 1);
+            return i + 1;
+          }
+          return i;
+        });
       }, 250);
     },
-    [currentQuestion, currentIndex, totalQuestions, getPoints]
+    [currentQuestion, totalQuestions, getPoints, autoSave]
   );
 
   const handlePrev = () => {
@@ -107,6 +202,14 @@ export function AuditPage() {
   const handleFinish = async () => {
     if (!dept || !currentUser) return;
 
+    const unanswered = totalQuestions - answers.size;
+    if (unanswered > 0) {
+      const ok = window.confirm(
+        `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Unanswered questions score 0 points. Continue?`
+      );
+      if (!ok) return;
+    }
+
     const maxPoints = allQuestions.reduce((acc, q) => acc + q.pointsYes, 0);
     const earnedPoints = Array.from(answers.values()).reduce(
       (acc, a) => acc + a.points,
@@ -114,20 +217,42 @@ export function AuditPage() {
     );
     const pct = maxPoints > 0 ? Math.round((earnedPoints / maxPoints) * 100) : 0;
 
-    const sessionId = await saveSession({
-      companyId: company?.id || '',
-      departmentId: dept.id,
-      auditorId: currentUser.id,
-      auditorName: currentUser.name,
-      date: new Date().toISOString(),
-      answers: Array.from(answers.values()),
-      totalPoints: earnedPoints,
-      maxPoints,
-      percentage: pct,
-      completed: true,
-    });
+    setIsSaving(true);
+    // Cancel any pending auto-save
+    clearTimeout(saveTimer.current);
 
-    navigate(`/results/${sessionId}`);
+    try {
+      if (sessionId) {
+        // Update existing in-progress session to completed
+        await updateSession(sessionId, {
+          answers: Array.from(answers.values()),
+          totalPoints: earnedPoints,
+          maxPoints,
+          percentage: pct,
+          date: new Date().toISOString(),
+          completed: true,
+        });
+        navigate(`/results/${sessionId}`);
+      } else {
+        const newId = await saveSession({
+          companyId: company?.id ?? '',
+          departmentId: dept.id,
+          auditorId: currentUser.id,
+          auditorName: currentUser.name,
+          date: new Date().toISOString(),
+          answers: Array.from(answers.values()),
+          totalPoints: earnedPoints,
+          maxPoints,
+          percentage: pct,
+          completed: true,
+        });
+        navigate(`/results/${newId}`);
+      }
+    } catch {
+      toast.error('Failed to save audit. Your answers are still here — please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!dept) {
@@ -156,7 +281,8 @@ export function AuditPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/audit')}
+            aria-label="Go back"
           >
             <ArrowLeft size={18} />
           </Button>
@@ -195,7 +321,7 @@ export function AuditPage() {
               {currentQuestion.answerType === 'yes_no_partial' && (
                 <span>Partial: {currentQuestion.pointsPartial} pts</span>
               )}
-              <span>No: 0 pts</span>
+              <span>No: {currentQuestion.pointsNo} pts</span>
             </div>
           </CardContent>
 
@@ -212,6 +338,7 @@ export function AuditPage() {
             >
               <button
                 onClick={() => handleAnswer('yes')}
+                aria-label={`Answer Yes, ${currentQuestion.pointsYes} points`}
                 className={`flex flex-col items-center gap-1.5 py-4 rounded-xl border-2 transition-all ${
                   currentAnswer === 'yes'
                     ? 'border-emerald-500 bg-emerald-50'
@@ -237,6 +364,7 @@ export function AuditPage() {
               {currentQuestion.answerType === 'yes_no_partial' && (
                 <button
                   onClick={() => handleAnswer('partial')}
+                  aria-label={`Answer Partial, ${currentQuestion.pointsPartial} points`}
                   className={`flex flex-col items-center gap-1.5 py-4 rounded-xl border-2 transition-all ${
                     currentAnswer === 'partial'
                       ? 'border-amber-500 bg-amber-50'
@@ -262,6 +390,7 @@ export function AuditPage() {
 
               <button
                 onClick={() => handleAnswer('no')}
+                aria-label={`Answer No, ${currentQuestion.pointsNo} points`}
                 className={`flex flex-col items-center gap-1.5 py-4 rounded-xl border-2 transition-all ${
                   currentAnswer === 'no'
                     ? 'border-red-500 bg-red-50'
@@ -279,7 +408,7 @@ export function AuditPage() {
                 >
                   No
                 </span>
-                <span className="text-xs text-muted-foreground">0 pts</span>
+                <span className="text-xs text-muted-foreground">{currentQuestion.pointsNo} pts</span>
               </button>
             </div>
           </div>
@@ -308,8 +437,8 @@ export function AuditPage() {
           )}
 
           {(isLastQuestion || answeredCount === totalQuestions) && (
-            <Button onClick={handleFinish} className="gap-1.5">
-              Finish audit
+            <Button onClick={handleFinish} disabled={isSaving} className="gap-1.5">
+              {isSaving ? 'Saving...' : 'Finish audit'}
               <ArrowRight size={14} />
             </Button>
           )}
@@ -332,11 +461,15 @@ export function AuditPage() {
                 setCurrentIndex(i);
                 setAnimKey((k) => k + 1);
               }}
-              className={`w-2.5 h-2.5 rounded-full transition-all ${dotColor} ${
-                i === currentIndex ? 'ring-2 ring-primary ring-offset-1' : ''
-              }`}
-              title={`Question ${i + 1}`}
-            />
+              className="p-1.5"
+              aria-label={`Go to question ${i + 1}`}
+            >
+              <div
+                className={`w-2.5 h-2.5 rounded-full transition-all ${dotColor} ${
+                  i === currentIndex ? 'ring-2 ring-primary ring-offset-1' : ''
+                }`}
+              />
+            </button>
           );
         })}
       </div>

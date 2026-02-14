@@ -8,6 +8,52 @@ export const list = query({
   },
 });
 
+export const update = mutation({
+  args: {
+    sessionId: v.id("auditSessions"),
+    companyId: v.optional(v.string()),
+    departmentId: v.optional(v.string()),
+    auditorId: v.optional(v.string()),
+    auditorName: v.optional(v.string()),
+    date: v.optional(v.string()),
+    answers: v.optional(
+      v.array(
+        v.object({
+          questionId: v.string(),
+          value: v.union(
+            v.literal("yes"),
+            v.literal("no"),
+            v.literal("partial"),
+            v.null(),
+          ),
+          points: v.number(),
+        }),
+      ),
+    ),
+    totalPoints: v.optional(v.number()),
+    maxPoints: v.optional(v.number()),
+    percentage: v.optional(v.number()),
+    completed: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { sessionId, ...rest }) => {
+    // Filter out undefined values
+    const patch: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rest)) {
+      if (value !== undefined) patch[key] = value;
+    }
+    await ctx.db.patch(sessionId, patch);
+  },
+});
+
+export const remove = mutation({
+  args: {
+    sessionId: v.id("auditSessions"),
+  },
+  handler: async (ctx, { sessionId }) => {
+    await ctx.db.delete(sessionId);
+  },
+});
+
 export const save = mutation({
   args: {
     companyId: v.string(),
@@ -22,7 +68,6 @@ export const save = mutation({
           v.literal("yes"),
           v.literal("no"),
           v.literal("partial"),
-          v.literal("na"),
           v.null(),
         ),
         points: v.number(),

@@ -1,8 +1,8 @@
 export type Role = 'admin' | 'user';
 
-export type AnswerType = 'yes_no' | 'yes_no_partial' | 'yes_no_na';
+export type AnswerType = 'yes_no' | 'yes_no_partial';
 
-export type AnswerValue = 'yes' | 'no' | 'partial' | 'na' | null;
+export type AnswerValue = 'yes' | 'no' | 'partial' | null;
 
 export interface User {
   id: string;

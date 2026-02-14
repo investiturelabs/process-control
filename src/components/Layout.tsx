@@ -43,6 +43,8 @@ export function Layout() {
               size="icon"
               className="md:hidden h-8 w-8"
               onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileOpen}
             >
               {mobileOpen ? <X size={20} /> : <Menu size={20} />}
             </Button>
@@ -61,7 +63,7 @@ export function Layout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === '/' || item.to === '/audit'}
+                end={item.to === '/'}
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
@@ -83,7 +85,7 @@ export function Layout() {
                   style={{ backgroundColor: currentUser?.avatarColor }}
                   className="text-white text-xs font-semibold"
                 >
-                  {currentUser?.name?.charAt(0).toUpperCase()}
+                  {currentUser?.name?.charAt(0)?.toUpperCase() || '?'}
                 </AvatarFallback>
               </Avatar>
               <span className="hidden sm:block text-sm text-muted-foreground">
@@ -95,7 +97,7 @@ export function Layout() {
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
               onClick={handleLogout}
-              title="Sign out"
+              aria-label="Sign out"
             >
               <LogOut size={16} />
             </Button>
@@ -105,12 +107,12 @@ export function Layout() {
         {mobileOpen && (
           <>
             <Separator />
-            <div className="md:hidden bg-card px-4 pb-3 pt-2">
+            <nav aria-label="Mobile navigation" className="md:hidden bg-card px-4 pb-3 pt-2">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/' || item.to === '/audit'}
+                  end={item.to === '/'}
                   onClick={() => setMobileOpen(false)}
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium ${
@@ -124,7 +126,7 @@ export function Layout() {
                   {item.label}
                 </NavLink>
               ))}
-            </div>
+            </nav>
           </>
         )}
       </header>

@@ -1,11 +1,15 @@
+import type { AuditSession, Department } from '@/types';
+
+// Fix #11: Handle \r in escapeCsv
 function escapeCsv(value: string | number | boolean): string {
   const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
 }
 
+// Fix #10: Delay revocation to avoid premature cleanup
 function downloadCsv(filename: string, rows: (string | number | boolean)[][]) {
   const csv = rows.map((row) => row.map(escapeCsv).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -14,10 +18,8 @@ function downloadCsv(filename: string, rows: (string | number | boolean)[][]) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-
-import type { AuditSession, Department } from '@/types';
 
 export function exportSessionsCsv(
   sessions: AuditSession[],
@@ -36,12 +38,15 @@ export function exportSessionsCsv(
 
   const rows = sessions.map((s) => {
     const dept = departments.find((d) => d.id === s.departmentId);
+    // Fix #26: Validate date
+    const dateStr = new Date(s.date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const safeDate = dateStr === 'Invalid Date' ? s.date : dateStr;
     return [
-      new Date(s.date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }),
+      safeDate,
       dept?.name ?? s.departmentId,
       s.auditorName,
       s.percentage,
@@ -63,6 +68,7 @@ export function exportSingleAuditCsv(
     month: '2-digit',
     day: '2-digit',
   });
+  const safeDate = dateStr === 'Invalid Date' ? session.date : dateStr;
 
   const header = [
     'Category',
@@ -85,17 +91,17 @@ export function exportSingleAuditCsv(
     ];
   });
 
-  // Summary rows at the bottom
-  const summary = [
-    [],
-    ['Summary'],
-    ['Department', department.name],
-    ['Date', dateStr],
-    ['Auditor', session.auditorName],
-    ['Score', `${session.percentage}%`],
-    ['Total Points', `${session.totalPoints} / ${session.maxPoints}`],
+  // Fix #27: Pad summary rows to match header column count (5 columns)
+  const summary: (string | number | boolean)[][] = [
+    ['', '', '', '', ''],
+    ['Summary', '', '', '', ''],
+    ['Department', department.name, '', '', ''],
+    ['Date', safeDate, '', '', ''],
+    ['Auditor', session.auditorName, '', '', ''],
+    ['Score', `${session.percentage}%`, '', '', ''],
+    ['Total Points', `${session.totalPoints} / ${session.maxPoints}`, '', '', ''],
   ];
 
-  const filename = `audit-${department.name.toLowerCase().replace(/\s+/g, '-')}-${dateStr.replace(/\//g, '-')}.csv`;
-  downloadCsv(filename, [header, ...rows, ...(summary as (string | number | boolean)[][])]);
+  const filename = `audit-${department.name.toLowerCase().replace(/\s+/g, '-')}-${safeDate.replace(/\//g, '-')}.csv`;
+  downloadCsv(filename, [header, ...rows, ...summary]);
 }

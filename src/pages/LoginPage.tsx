@@ -12,12 +12,22 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
-    await login(name.trim(), email.trim().toLowerCase());
-    navigate('/');
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await login(name.trim(), email.trim().toLowerCase());
+      navigate('/');
+    } catch {
+      setError('Failed to sign in. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -61,13 +71,13 @@ export function LoginPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full mt-6">
-                Sign in
-              </Button>
+              {error && (
+                <p className="text-sm text-red-600 mt-3" role="alert">{error}</p>
+              )}
 
-              <p className="text-xs text-muted-foreground text-center mt-4">
-                First user becomes admin. Others join as team members.
-              </p>
+              <Button type="submit" className="w-full mt-6" disabled={isSubmitting}>
+                {isSubmitting ? 'Signing in...' : 'Sign in'}
+              </Button>
             </form>
           </CardContent>
         </Card>

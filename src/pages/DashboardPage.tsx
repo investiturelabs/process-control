@@ -1,19 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
+import { DateRangePills } from '@/components/DateRangePills';
+import { DepartmentFilter } from '@/components/DepartmentFilter';
 import { BarChart3, TrendingUp, Target, Calendar, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { getScoreColor } from '@/lib/score-colors';
 import { exportSessionsCsv } from '@/lib/export';
+import { getCompletedSessions, averagePercentage } from '@/lib/session-utils';
+import { getFirstName } from '@/lib/utils';
+import type { DateRange } from '@/lib/date-utils';
 import {
   ResponsiveContainer,
   LineChart,
@@ -39,40 +37,25 @@ const DEPT_COLORS = [
   '#8b5cf6', '#06b6d4', '#6366f1', '#ec4899',
 ];
 
-type DateRange = '30d' | '90d' | '6m' | '1y' | 'all';
-
-function getDateCutoff(range: DateRange): Date | null {
-  if (range === 'all') return null;
-  const now = new Date();
-  switch (range) {
-    case '30d': return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-    case '90d': return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 90);
-    case '6m': return new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
-    case '1y': return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-  }
-}
-
 export function DashboardPage() {
   const { sessions, departments, currentUser } = useAppStore();
   const navigate = useNavigate();
   const [filterDept, setFilterDept] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
+  const gradientId = useId();
 
-  const completedSessions = useMemo(() => {
-    const cutoff = getDateCutoff(dateRange);
-    return sessions
-      .filter((s) => {
-        if (!s.completed) return false;
-        if (cutoff && new Date(s.date) < cutoff) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [sessions, dateRange]);
+  const completedSessions = useMemo(
+    () => getCompletedSessions(sessions, dateRange),
+    [sessions, dateRange]
+  );
 
-  const filteredSessions =
-    filterDept === 'all'
+  // Fix #37: Memoize filteredSessions
+  const filteredSessions = useMemo(
+    () => filterDept === 'all'
       ? completedSessions
-      : completedSessions.filter((s) => s.departmentId === filterDept);
+      : completedSessions.filter((s) => s.departmentId === filterDept),
+    [completedSessions, filterDept]
+  );
 
   // --- Department average scores ---
   const deptAverages = useMemo(() => {
@@ -81,20 +64,9 @@ export function DashboardPage() {
         const deptSessions = completedSessions.filter(
           (s) => s.departmentId === dept.id,
         );
-        const avg =
-          deptSessions.length > 0
-            ? Math.round(
-                deptSessions.reduce((acc, s) => acc + s.percentage, 0) /
-                  deptSessions.length,
-              )
-            : 0;
+        const avg = averagePercentage(deptSessions);
         const recent = deptSessions.slice(-3);
-        const recentAvg =
-          recent.length > 0
-            ? Math.round(
-                recent.reduce((acc, s) => acc + s.percentage, 0) / recent.length,
-              )
-            : 0;
+        const recentAvg = averagePercentage(recent);
         return {
           name: dept.name.length > 12 ? dept.name.slice(0, 12) + '...' : dept.name,
           fullName: dept.name,
@@ -204,36 +176,31 @@ export function DashboardPage() {
     });
   }, [completedSessions, departments]);
 
-  // --- Summary stats ---
-  const overallAvg =
-    completedSessions.length > 0
-      ? Math.round(
-          completedSessions.reduce((acc, s) => acc + s.percentage, 0) /
-            completedSessions.length,
-        )
-      : 0;
+  // Fix #36: Memoize summary stats
+  const { overallAvg, recentAvg, improvementTrend, bestDept } = useMemo(() => {
+    const overallAvg = averagePercentage(completedSessions);
+    const recentSessions = completedSessions.slice(-20);
+    const recentAvg = averagePercentage(recentSessions);
+    const bestDept = deptAverages[0];
+    const improvementTrend =
+      monthlyTrend.length >= 2
+        ? monthlyTrend[monthlyTrend.length - 1].avg - monthlyTrend[0].avg
+        : 0;
+    return { overallAvg, recentAvg, improvementTrend, bestDept };
+  }, [completedSessions, deptAverages, monthlyTrend]);
 
-  const recentMonth = completedSessions.slice(-20);
-  const recentAvg =
-    recentMonth.length > 0
-      ? Math.round(
-          recentMonth.reduce((acc, s) => acc + s.percentage, 0) /
-            recentMonth.length,
-        )
-      : 0;
-
-  const bestDept = deptAverages[0];
-  const improvementTrend =
-    monthlyTrend.length >= 2
-      ? monthlyTrend[monthlyTrend.length - 1].avg - monthlyTrend[0].avg
-      : 0;
+  // Fix #69: Dynamic YAxis domain
+  const minScore = useMemo(() => {
+    const allAvgs = monthlyTrend.map(m => m.avg);
+    return allAvgs.length > 0 ? Math.min(60, Math.min(...allAvgs) - 5) : 60;
+  }, [monthlyTrend]);
 
   if (completedSessions.length === 0) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-xl font-bold">
-            Welcome back, {currentUser?.name?.split(' ')[0]}
+            Welcome back, {getFirstName(currentUser)}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Review audit trends and department performance
@@ -255,42 +222,15 @@ export function DashboardPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold">
-            Welcome back, {currentUser?.name?.split(' ')[0]}
+            Welcome back, {getFirstName(currentUser)}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Review audit trends and department performance
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Date range pills */}
-          <div className="flex rounded-lg border border-border overflow-hidden">
-            {(['30d', '90d', '6m', '1y', 'all'] as DateRange[]).map((range) => (
-              <button
-                key={range}
-                onClick={() => setDateRange(range)}
-                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  dateRange === range
-                    ? 'bg-primary text-primary-foreground'
-                    : 'hover:bg-accent'
-                }`}
-              >
-                {range === 'all' ? 'All' : range}
-              </button>
-            ))}
-          </div>
-          <Select value={filterDept} onValueChange={setFilterDept}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All departments" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All departments</SelectItem>
-              {departments.map((d) => (
-                <SelectItem key={d.id} value={d.id}>
-                  {d.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DateRangePills value={dateRange} onChange={setDateRange} />
+          <DepartmentFilter departments={departments} value={filterDept} onChange={setFilterDept} />
           <Button
             variant="outline"
             size="sm"
@@ -345,6 +285,28 @@ export function DashboardPage() {
         </Card>
       </div>
 
+      {/* Best dept callout */}
+      {bestDept && (
+        <Card className="border-emerald-200 bg-emerald-50/30">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <DeptIcon name={bestDept.icon} size={20} className="text-emerald-700" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">
+                Top Performing: {bestDept.fullName}
+              </p>
+              <p className="text-xs text-emerald-700">
+                {bestDept.avg}% average across {bestDept.count} audits
+                {bestDept.recentAvg > bestDept.avg && (
+                  <> &middot; trending up to {bestDept.recentAvg}% recently</>
+                )}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Monthly Overall Trend */}
       {monthlyTrend.length > 1 && (
         <Card>
@@ -355,7 +317,7 @@ export function DashboardPage() {
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={monthlyTrend}>
                 <defs>
-                  <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
@@ -368,7 +330,7 @@ export function DashboardPage() {
                   tickLine={false}
                 />
                 <YAxis
-                  domain={[60, 100]}
+                  domain={[minScore, 100]}
                   tick={{ fontSize: 11, fill: '#94a3b8' }}
                   axisLine={{ stroke: '#e2e8f0' }}
                   tickLine={false}
@@ -390,7 +352,7 @@ export function DashboardPage() {
                   dataKey="avg"
                   stroke="#3b82f6"
                   strokeWidth={2.5}
-                  fill="url(#scoreGradient)"
+                  fill={`url(#${gradientId})`}
                   dot={{ fill: '#3b82f6', r: 4, strokeWidth: 2, stroke: '#fff' }}
                   activeDot={{ r: 6 }}
                 />
@@ -419,7 +381,7 @@ export function DashboardPage() {
                     tickLine={false}
                   />
                   <YAxis
-                    domain={[60, 100]}
+                    domain={[minScore, 100]}
                     tick={{ fontSize: 10, fill: '#94a3b8' }}
                     axisLine={{ stroke: '#e2e8f0' }}
                     tickLine={false}
@@ -614,27 +576,6 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {/* Best dept callout */}
-      {bestDept && (
-        <Card className="border-emerald-200 bg-emerald-50/30">
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <DeptIcon name={bestDept.icon} size={20} className="text-emerald-700" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-emerald-900">
-                Top Performing: {bestDept.fullName}
-              </p>
-              <p className="text-xs text-emerald-700">
-                {bestDept.avg}% average across {bestDept.count} audits
-                {bestDept.recentAvg > bestDept.avg && (
-                  <> &middot; trending up to {bestDept.recentAvg}% recently</>
-                )}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

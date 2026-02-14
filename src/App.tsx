@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { StoreProvider, useAppStore } from '@/context';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AuditPage } from '@/pages/AuditPage';
@@ -41,6 +43,7 @@ function AppRoutes() {
         <Route path="history" element={<HistoryPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="team" element={<TeamPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );
@@ -49,9 +52,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter basename="/process-control">
-      <StoreProvider>
-        <AppRoutes />
-      </StoreProvider>
+      <ErrorBoundary>
+        <StoreProvider>
+          <AppRoutes />
+          <Toaster />
+        </StoreProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

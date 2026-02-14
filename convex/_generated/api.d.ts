@@ -14,6 +14,7 @@ import type * as invitations from "../invitations.js";
 import type * as questions from "../questions.js";
 import type * as seed from "../seed.js";
 import type * as sessions from "../sessions.js";
+import type * as testData from "../testData.js";
 import type * as users from "../users.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   questions: typeof questions;
   seed: typeof seed;
   sessions: typeof sessions;
+  testData: typeof testData;
   users: typeof users;
 }>;
 

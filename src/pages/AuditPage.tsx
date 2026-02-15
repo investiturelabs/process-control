@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { track } from '@/lib/analytics';
+import { captureException } from '@/lib/errorTracking';
 
 export function AuditPage() {
   const { departmentId } = useParams<{ departmentId: string }>();
@@ -251,7 +252,8 @@ export function AuditPage() {
         track({ name: 'audit_completed', properties: { departmentId: dept.id, percentage: pct } });
         navigate(`/results/${newId}`);
       }
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to save audit. Your answers are still here — please try again.');
     } finally {
       setIsSaving(false);

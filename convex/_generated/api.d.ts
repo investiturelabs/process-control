@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as changeLog from "../changeLog.js";
 import type * as companies from "../companies.js";
+import type * as crons from "../crons.js";
 import type * as departments from "../departments.js";
 import type * as invitations from "../invitations.js";
 import type * as questions from "../questions.js";
@@ -24,7 +26,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  changeLog: typeof changeLog;
   companies: typeof companies;
+  crons: typeof crons;
   departments: typeof departments;
   invitations: typeof invitations;
   questions: typeof questions;

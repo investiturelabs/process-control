@@ -53,6 +53,14 @@ export default defineSchema({
           v.null(),
         ),
         points: v.number(),
+        // PCT-20: question snapshot (optional, backward compat)
+        questionText: v.optional(v.string()),
+        questionCriteria: v.optional(v.string()),
+        questionRiskCategory: v.optional(v.string()),
+        questionAnswerType: v.optional(v.union(v.literal("yes_no"), v.literal("yes_no_partial"))),
+        questionPointsYes: v.optional(v.number()),
+        questionPointsPartial: v.optional(v.number()),
+        questionPointsNo: v.optional(v.number()),
       }),
     ),
     totalPoints: v.number(),
@@ -63,10 +71,25 @@ export default defineSchema({
     .index("by_auditorId", ["auditorId"])
     .index("by_completed_departmentId", ["completed", "departmentId"]),
 
+  // PCT-14: Change log for audit trail
+  changeLog: defineTable({
+    timestamp: v.string(),
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
+    action: v.string(),
+    entityType: v.string(),
+    entityId: v.optional(v.string()),
+    entityLabel: v.optional(v.string()),
+    details: v.optional(v.string()),
+  }).index("by_timestamp", ["timestamp"])
+    .index("by_entityType_timestamp", ["entityType", "timestamp"]),
+
   invitations: defineTable({
     email: v.string(),
     role: v.union(v.literal("admin"), v.literal("user")),
     status: v.union(v.literal("pending"), v.literal("accepted")),
     createdAt: v.string(),
-  }).index("by_email", ["email"]),
+    expiresAt: v.optional(v.string()),
+  }).index("by_email", ["email"])
+    .index("by_status", ["status"]),
 });

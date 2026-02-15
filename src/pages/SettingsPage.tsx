@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
-import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database, Copy, Upload, Download, HardDrive, Search, X } from 'lucide-react';
+import { Building2, Save, RotateCcw, Plus, Pencil, Trash2, Database, Copy, Upload, Download, HardDrive, Search, X, History } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
 import type { Question, Department } from '@/types';
 import { toast } from 'sonner';
@@ -24,11 +25,13 @@ import { DeptIcon, DEPT_ICON_NAMES } from '@/components/DeptIcon';
 import { exportQuestionsCsv } from '@/lib/export';
 import { createBackup, downloadBackup } from '@/lib/backup';
 import { track } from '@/lib/analytics';
+import { captureException } from '@/lib/errorTracking';
 
 export function SettingsPage() {
   const { company, setCompany, currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, generateTestData, duplicateDepartment, users, sessions, invitations } =
     useAppStore();
   const isAdmin = currentUser?.role === 'admin';
+  const navigate = useNavigate();
 
   const [companyName, setCompanyName] = useState(company?.name || '');
   const [logoUrl, setLogoUrl] = useState(company?.logoUrl || '');
@@ -95,7 +98,8 @@ export function SettingsPage() {
         track({ name: 'department_added', properties: { name: trimmed } });
       }
       setDeptDialogOpen(false);
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to save department.');
     } finally {
       setDeptSaving(false);
@@ -108,7 +112,8 @@ export function SettingsPage() {
       await removeDepartment(deleteDeptTarget.id);
       track({ name: 'department_deleted', properties: { name: deleteDeptTarget.name } });
       setDeleteDeptTarget(null);
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to delete department.');
     }
   };
@@ -130,7 +135,8 @@ export function SettingsPage() {
     setIsSaving(true);
     try {
       await setCompany({ id: '', name: trimmedName, logoUrl: trimmedUrl || undefined });
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to save company settings.');
     } finally {
       setIsSaving(false);
@@ -141,7 +147,8 @@ export function SettingsPage() {
     try {
       await updateDepartments(seedDepartments);
       setShowResetDialog(false);
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to reset departments.');
     }
   };
@@ -182,7 +189,8 @@ export function SettingsPage() {
         await addQuestion(rest);
         track({ name: 'question_added', properties: { departmentId: editingDeptId } });
       }
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to save question.');
     }
   };
@@ -194,7 +202,8 @@ export function SettingsPage() {
       await removeQuestion(deleteTarget.questionId);
       track({ name: 'question_deleted', properties: { departmentId: deleteTarget.deptId } });
       setDeleteTarget(null);
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to remove question.');
     }
   };
@@ -403,7 +412,8 @@ export function SettingsPage() {
                         await duplicateDepartment(dept.id);
                         track({ name: 'department_duplicated', properties: { sourceId: dept.id } });
                         toast.success(`Duplicated "${dept.name}"`);
-                      } catch {
+                      } catch (err) {
+                        captureException(err);
                         toast.error('Failed to duplicate department.');
                       } finally {
                         setDuplicatingId(null);
@@ -512,7 +522,8 @@ export function SettingsPage() {
               try {
                 await generateTestData();
                 setDataGenerated(true);
-              } catch {
+              } catch (err) {
+                captureException(err);
                 toast.error('Failed to generate test data.');
               } finally {
                 setGeneratingData(false);
@@ -546,13 +557,38 @@ export function SettingsPage() {
                 downloadBackup(createBackup({ company, users, departments, sessions, invitations }));
                 track({ name: 'backup_exported', properties: {} });
                 toast.success('Backup exported.');
-              } catch {
+              } catch (err) {
+                captureException(err);
                 toast.error('Failed to export backup.');
               }
             }}
           >
             <Download size={14} />
             Export backup
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Activity log */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <History size={16} className="text-muted-foreground" />
+            Activity Log
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            View a log of all administrative changes, role updates, and audit completions.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => navigate('/activity')}
+          >
+            <History size={14} />
+            View activity log
           </Button>
         </CardContent>
       </Card>

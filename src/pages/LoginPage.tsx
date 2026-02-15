@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
+import { captureException } from '@/lib/errorTracking';
 import { ClipboardCheck } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ export function LoginPage() {
       await login(name.trim(), email.trim().toLowerCase());
       navigate('/');
     } catch (err) {
+      captureException(err);
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('deactivated')) {
         setError('Account deactivated. Contact your administrator.');

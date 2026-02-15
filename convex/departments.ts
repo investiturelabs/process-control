@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { logChange } from "./changeLog";
 
 const departmentsValidator = v.array(
   v.object({
@@ -59,8 +60,10 @@ export const add = mutation({
   args: {
     name: v.string(),
     icon: v.string(),
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { name, icon }) => {
+  handler: async (ctx, { name, icon, actorId, actorName }) => {
     const existing = await ctx.db.query("departments").collect();
     const maxOrder = existing.reduce((max, d) => Math.max(max, d.sortOrder), -1);
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -71,6 +74,16 @@ export const add = mutation({
       icon,
       sortOrder: maxOrder + 1,
     });
+
+    await logChange(ctx, {
+      actorId,
+      actorName,
+      action: "department.add",
+      entityType: "department",
+      entityId: stableId,
+      entityLabel: name,
+    });
+
     return stableId;
   },
 });
@@ -80,22 +93,43 @@ export const update = mutation({
     stableId: v.string(),
     name: v.string(),
     icon: v.string(),
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { stableId, name, icon }) => {
+  handler: async (ctx, { stableId, name, icon, actorId, actorName }) => {
     const dept = await ctx.db
       .query("departments")
       .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
       .unique();
     if (!dept) throw new Error("Department not found");
+
+    const oldName = dept.name;
+    const oldIcon = dept.icon;
     await ctx.db.patch(dept._id, { name, icon });
+
+    const changes: Record<string, { from: string; to: string }> = {};
+    if (oldName !== name) changes.name = { from: oldName, to: name };
+    if (oldIcon !== icon) changes.icon = { from: oldIcon, to: icon };
+
+    await logChange(ctx, {
+      actorId,
+      actorName,
+      action: "department.update",
+      entityType: "department",
+      entityId: stableId,
+      entityLabel: name,
+      details: JSON.stringify(changes),
+    });
   },
 });
 
 export const remove = mutation({
   args: {
     stableId: v.string(),
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { stableId }) => {
+  handler: async (ctx, { stableId, actorId, actorName }) => {
     const dept = await ctx.db
       .query("departments")
       .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
@@ -122,12 +156,26 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(dept._id);
+
+    await logChange(ctx, {
+      actorId,
+      actorName,
+      action: "department.remove",
+      entityType: "department",
+      entityId: stableId,
+      entityLabel: dept.name,
+      details: JSON.stringify({ deletedQuestions: questions.length }),
+    });
   },
 });
 
 export const duplicate = mutation({
-  args: { stableId: v.string() },
-  handler: async (ctx, { stableId }) => {
+  args: {
+    stableId: v.string(),
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
+  },
+  handler: async (ctx, { stableId, actorId, actorName }) => {
     const source = await ctx.db
       .query("departments")
       .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
@@ -166,6 +214,16 @@ export const duplicate = mutation({
         sortOrder: i,
       });
     }
+
+    await logChange(ctx, {
+      actorId,
+      actorName,
+      action: "department.duplicate",
+      entityType: "department",
+      entityId: newStableId,
+      entityLabel: source.name,
+    });
+
     return newStableId;
   },
 });
@@ -173,8 +231,10 @@ export const duplicate = mutation({
 export const resetToDefaults = mutation({
   args: {
     departments: departmentsValidator,
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { departments }) => {
+  handler: async (ctx, { departments, actorId, actorName }) => {
     // Delete all existing questions
     const existingQuestions = await ctx.db.query("questions").collect();
     for (const q of existingQuestions) {
@@ -212,5 +272,13 @@ export const resetToDefaults = mutation({
         });
       }
     }
+
+    await logChange(ctx, {
+      actorId,
+      actorName,
+      action: "department.resetToDefaults",
+      entityType: "department",
+      entityLabel: `Reset ${departments.length} departments`,
+    });
   },
 });

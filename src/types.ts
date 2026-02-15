@@ -42,6 +42,14 @@ export interface Answer {
   questionId: string;
   value: AnswerValue;
   points: number;
+  // PCT-20: question snapshot (optional, backward compat)
+  questionText?: string;
+  questionCriteria?: string;
+  questionRiskCategory?: string;
+  questionAnswerType?: AnswerType;
+  questionPointsYes?: number;
+  questionPointsPartial?: number;
+  questionPointsNo?: number;
 }
 
 export interface AuditSession {
@@ -64,4 +72,17 @@ export interface Invitation {
   role: Role;
   status: 'pending' | 'accepted';
   createdAt: string;
+  expiresAt?: string;
+}
+
+export interface ChangeLogEntry {
+  id: string;
+  timestamp: string;
+  actorId?: string;
+  actorName?: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  entityLabel?: string;
+  details?: string;
 }

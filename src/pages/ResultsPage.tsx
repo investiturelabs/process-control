@@ -34,8 +34,50 @@ export function ResultsPage() {
     return new Map(session.answers.map((a) => [a.questionId, a]));
   }, [session]);
 
+  const hasSnapshots = useMemo(() => {
+    if (!session) return false;
+    return session.answers.some((a) => a.questionText);
+  }, [session]);
+
   const categoryBreakdown = useMemo(() => {
-    if (!dept || !session) return [];
+    if (!session) return [];
+
+    // PCT-20: Use snapshot data when available
+    if (hasSnapshots) {
+      const cats: {
+        name: string;
+        earned: number;
+        max: number;
+        questions: {
+          text: string;
+          value: string;
+          earned: number;
+          max: number;
+        }[];
+      }[] = [];
+
+      for (const a of session.answers) {
+        const category = a.questionRiskCategory ?? 'Unknown';
+        let cat = cats.find((c) => c.name === category);
+        if (!cat) {
+          cat = { name: category, earned: 0, max: 0, questions: [] };
+          cats.push(cat);
+        }
+        const maxPts = a.questionPointsYes ?? a.points;
+        cat.earned += a.points;
+        cat.max += maxPts;
+        cat.questions.push({
+          text: a.questionText ?? 'Unknown question',
+          value: a.value ?? 'skipped',
+          earned: a.points,
+          max: maxPts,
+        });
+      }
+      return cats;
+    }
+
+    // Legacy: fall back to current department questions
+    if (!dept) return [];
     const cats: {
       name: string;
       earned: number;
@@ -66,7 +108,7 @@ export function ResultsPage() {
       });
     }
     return cats;
-  }, [dept, session, answerMap]);
+  }, [dept, session, answerMap, hasSnapshots]);
 
   if (!session) {
     return (
@@ -100,6 +142,16 @@ export function ResultsPage() {
             </Button>
             <h1 className="font-semibold">Deleted department — Audit Results</h1>
           </div>
+          {hasSnapshots && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { exportSingleAuditCsv(session); track({ name: 'csv_exported', properties: { type: 'single_audit' } }); }}
+            >
+              <Download size={14} className="mr-1.5" />
+              Export
+            </Button>
+          )}
         </div>
 
         {/* Score hero */}
@@ -135,32 +187,73 @@ export function ResultsPage() {
           </CardContent>
         </Card>
 
-        {/* Flat answer list */}
-        {session.answers.length > 0 && (
-          <Card>
-            <CardHeader className="px-4 py-3">
-              <h3 className="text-sm font-semibold">Answers</h3>
-            </CardHeader>
-            <Separator />
-            <CardContent className="p-0 divide-y divide-border/50">
-              {session.answers.map((a) => (
-                <div key={a.questionId} className="px-4 py-2.5 flex items-center gap-3">
-                  <div>
-                    {a.value === 'yes' && <CheckCircle2 size={16} className="text-emerald-500" />}
-                    {a.value === 'partial' && <MinusCircle size={16} className="text-amber-500" />}
-                    {a.value === 'no' && <XCircle size={16} className="text-red-500" />}
-                    {(a.value === null || a.value === undefined) && (
-                      <div className="w-4 h-4 rounded-full border-2 border-border" />
-                    )}
+        {/* PCT-20: Full category breakdown when snapshots exist, flat list otherwise */}
+        {hasSnapshots ? (
+          <div className="space-y-4">
+            {categoryBreakdown.map((cat) => {
+              const pct = cat.max > 0 ? Math.round((cat.earned / cat.max) * 100) : 0;
+              const catColor = getScoreColor(pct);
+              return (
+                <Card key={cat.name}>
+                  <CardHeader className="px-4 py-3 flex-row items-center justify-between space-y-0">
+                    <div>
+                      <h3 className="text-sm font-semibold">{cat.name}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {cat.earned} / {cat.max} pts
+                      </p>
+                    </div>
+                    <span className={`text-sm font-bold ${catColor.text}`}>
+                      {pct}%
+                    </span>
+                  </CardHeader>
+                  <Separator />
+                  <CardContent className="p-0 divide-y divide-border/50">
+                    {cat.questions.map((q, i) => (
+                      <div key={i} className="px-4 py-2.5 flex items-start gap-3">
+                        <div className="mt-0.5">
+                          {q.value === 'yes' && <CheckCircle2 size={16} className="text-emerald-500" />}
+                          {q.value === 'partial' && <MinusCircle size={16} className="text-amber-500" />}
+                          {q.value === 'no' && <XCircle size={16} className="text-red-500" />}
+                          {q.value === 'skipped' && <div className="w-4 h-4 rounded-full border-2 border-border" />}
+                        </div>
+                        <p className="flex-1 min-w-0 text-sm leading-snug">{q.text}</p>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {q.earned}/{q.max}
+                        </span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          session.answers.length > 0 && (
+            <Card>
+              <CardHeader className="px-4 py-3">
+                <h3 className="text-sm font-semibold">Answers</h3>
+              </CardHeader>
+              <Separator />
+              <CardContent className="p-0 divide-y divide-border/50">
+                {session.answers.map((a) => (
+                  <div key={a.questionId} className="px-4 py-2.5 flex items-center gap-3">
+                    <div>
+                      {a.value === 'yes' && <CheckCircle2 size={16} className="text-emerald-500" />}
+                      {a.value === 'partial' && <MinusCircle size={16} className="text-amber-500" />}
+                      {a.value === 'no' && <XCircle size={16} className="text-red-500" />}
+                      {(a.value === null || a.value === undefined) && (
+                        <div className="w-4 h-4 rounded-full border-2 border-border" />
+                      )}
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {a.value === 'yes' ? 'Yes' : a.value === 'partial' ? 'Partial' : a.value === 'no' ? 'No' : 'Skipped'}
+                    </span>
+                    <span className="ml-auto text-xs text-muted-foreground">{a.points} pts</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    {a.value === 'yes' ? 'Yes' : a.value === 'partial' ? 'Partial' : a.value === 'no' ? 'No' : 'Skipped'}
-                  </span>
-                  <span className="ml-auto text-xs text-muted-foreground">{a.points} pts</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          )
         )}
 
         <div className="mt-6 text-center">
@@ -253,8 +346,8 @@ export function ResultsPage() {
               </CardHeader>
               <Separator />
               <CardContent className="p-0 divide-y divide-border/50">
-                {cat.questions.map((q) => (
-                  <div key={q.text} className="px-4 py-2.5 flex items-start gap-3">
+                {cat.questions.map((q, i) => (
+                  <div key={i} className="px-4 py-2.5 flex items-start gap-3">
                     <div className="mt-0.5">
                       {q.value === 'yes' && (
                         <CheckCircle2 size={16} className="text-emerald-500" />

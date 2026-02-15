@@ -15,6 +15,7 @@ import type { User, Company, Department, AuditSession, Invitation, Role, Questio
 import { seedDepartments } from './seed-data';
 import type { Id } from '../convex/_generated/dataModel';
 import { track, identify } from '@/lib/analytics';
+import { setErrorTrackingUser } from '@/lib/errorTracking';
 
 const CURRENT_USER_KEY = 'pcr_currentUser';
 
@@ -45,6 +46,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const usersData = useQuery(api.users.list);
   const companyData = useQuery(api.companies.get);
   const departmentsData = useQuery(api.departments.listWithQuestions);
+  // TODO: Replace sessions.list with paginated/scoped query to reduce payload
   const sessionsData = useQuery(api.sessions.list);
   const invitationsData = useQuery(api.invitations.list);
 
@@ -115,6 +117,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       role: inv.role as Role,
       status: inv.status as 'pending' | 'accepted',
       createdAt: inv.createdAt,
+      expiresAt: inv.expiresAt,
     }));
   }, [invitationsData]);
 
@@ -158,33 +161,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (name: string, email: string) => {
       const existedBefore = usersData?.some((u) => u.email === email.toLowerCase()) ?? false;
+      const hadInvitation = invitationsData?.some(
+        (i) => i.email === email.toLowerCase().trim() && i.status === 'pending'
+      );
       const doc = await loginMutation({ name, email });
       const user = mapConvexUser(doc);
       setCurrentUser(user);
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      track({ name: 'user_login', properties: { isNewUser: !existedBefore } });
+      track({
+        name: 'user_login',
+        properties: {
+          isNewUser: !existedBefore,
+          ...(hadInvitation && { invitedRole: user.role }),
+        },
+      });
       identify(user.id, { name: user.name, role: user.role });
+      setErrorTrackingUser({ id: user.id, email: user.email, name: user.name });
     },
-    [loginMutation, usersData],
+    [loginMutation, usersData, invitationsData],
   );
 
   const logout = useCallback(() => {
     setCurrentUser(null);
     localStorage.removeItem(CURRENT_USER_KEY);
+    setErrorTrackingUser(null);
   }, []);
 
   const setCompany = useCallback(
     async (_c: Company) => {
-      await setCompanyMutation({ name: _c.name, logoUrl: _c.logoUrl });
+      await setCompanyMutation({ name: _c.name, logoUrl: _c.logoUrl, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [setCompanyMutation],
+    [setCompanyMutation, currentUser],
   );
 
   const updateDepartments = useCallback(
     async (deps: Department[]) => {
-      await resetToDefaultsMutation({ departments: deps });
+      await resetToDefaultsMutation({ departments: deps, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [resetToDefaultsMutation],
+    [resetToDefaultsMutation, currentUser],
   );
 
   const saveSession = useCallback(
@@ -208,30 +222,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const inviteUser = useCallback(
     async (email: string, role: Role) => {
-      await createInvitationMutation({ email, role });
+      await createInvitationMutation({ email, role, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [createInvitationMutation],
+    [createInvitationMutation, currentUser],
   );
 
   const updateUserRole = useCallback(
     async (userId: string, role: Role) => {
-      await updateRoleMutation({ userId: userId as Id<'users'>, role });
+      await updateRoleMutation({ userId: userId as Id<'users'>, role, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [updateRoleMutation],
+    [updateRoleMutation, currentUser],
   );
 
   const removeInvitation = useCallback(
     async (invId: string) => {
-      await removeInvitationMutation({ invitationId: invId as Id<'invitations'> });
+      await removeInvitationMutation({ invitationId: invId as Id<'invitations'>, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [removeInvitationMutation],
+    [removeInvitationMutation, currentUser],
   );
 
   const addQuestion = useCallback(
     async (question: Omit<Question, 'id'>) => {
-      await addQuestionMutation(question);
+      await addQuestionMutation({ ...question, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [addQuestionMutation],
+    [addQuestionMutation, currentUser],
   );
 
   const updateQuestion = useCallback(
@@ -245,37 +259,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pointsYes: question.pointsYes,
         pointsPartial: question.pointsPartial,
         pointsNo: question.pointsNo,
+        actorId: currentUser?.id,
+        actorName: currentUser?.name,
       });
     },
-    [updateQuestionMutation],
+    [updateQuestionMutation, currentUser],
   );
 
   const removeQuestion = useCallback(
     async (questionId: string) => {
-      await removeQuestionMutation({ questionId: questionId as Id<'questions'> });
+      await removeQuestionMutation({ questionId: questionId as Id<'questions'>, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [removeQuestionMutation],
+    [removeQuestionMutation, currentUser],
   );
 
   const addDepartment = useCallback(
     async (name: string, icon: string): Promise<string> => {
-      return await addDepartmentMutation({ name, icon });
+      return await addDepartmentMutation({ name, icon, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [addDepartmentMutation],
+    [addDepartmentMutation, currentUser],
   );
 
   const updateDepartment = useCallback(
     async (stableId: string, name: string, icon: string) => {
-      await updateDepartmentMutation({ stableId, name, icon });
+      await updateDepartmentMutation({ stableId, name, icon, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [updateDepartmentMutation],
+    [updateDepartmentMutation, currentUser],
   );
 
   const removeDepartment = useCallback(
     async (stableId: string) => {
-      await removeDepartmentMutation({ stableId });
+      await removeDepartmentMutation({ stableId, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [removeDepartmentMutation],
+    [removeDepartmentMutation, currentUser],
   );
 
   const updateSession = useCallback(
@@ -290,9 +306,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const removeSession = useCallback(
     async (sessionId: string) => {
-      await removeSessionMutation({ sessionId: sessionId as Id<'auditSessions'> });
+      await removeSessionMutation({ sessionId: sessionId as Id<'auditSessions'>, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [removeSessionMutation],
+    [removeSessionMutation, currentUser],
   );
 
   const generateTestData = useCallback(async () => {
@@ -301,16 +317,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setUserActive = useCallback(
     async (userId: string, active: boolean) => {
-      await setActiveMutation({ userId: userId as Id<'users'>, active });
+      await setActiveMutation({ userId: userId as Id<'users'>, active, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [setActiveMutation],
+    [setActiveMutation, currentUser],
   );
 
   const duplicateDepartment = useCallback(
     async (stableId: string): Promise<string> => {
-      return await duplicateDepartmentMutation({ stableId });
+      return await duplicateDepartmentMutation({ stableId, actorId: currentUser?.id, actorName: currentUser?.name });
     },
-    [duplicateDepartmentMutation],
+    [duplicateDepartmentMutation, currentUser],
   );
 
   // Fix #2: Memoize the store object

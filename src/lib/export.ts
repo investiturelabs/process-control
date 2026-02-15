@@ -72,7 +72,7 @@ export function exportSessionsCsv(
 
 export function exportSingleAuditCsv(
   session: AuditSession,
-  department: Department,
+  department?: Department,
 ) {
   const dateStr = new Date(session.date).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -89,30 +89,57 @@ export function exportSingleAuditCsv(
     'Points Possible',
   ];
 
-  const answerMap = new Map(session.answers.map((a) => [a.questionId, a]));
+  const hasSnapshots = session.answers.some((a) => a.questionText);
+  let rows: (string | number | boolean)[][];
+  let deptName: string;
 
-  const rows = department.questions.map((q) => {
-    const ans = answerMap.get(q.id);
-    return [
-      q.riskCategory,
-      q.text,
-      ans?.value ?? 'skipped',
-      ans?.points ?? 0,
-      q.pointsYes,
-    ];
-  });
+  if (hasSnapshots) {
+    // PCT-20: Build rows from snapshot data
+    rows = session.answers.map((a) => [
+      a.questionRiskCategory ?? 'Unknown',
+      a.questionText ?? 'Unknown question',
+      a.value ?? 'skipped',
+      a.points,
+      a.questionPointsYes ?? a.points,
+    ]);
+    deptName = department?.name ?? session.departmentId;
+  } else if (department) {
+    // Legacy: use current department questions
+    const answerMap = new Map(session.answers.map((a) => [a.questionId, a]));
+    rows = department.questions.map((q) => {
+      const ans = answerMap.get(q.id);
+      return [
+        q.riskCategory,
+        q.text,
+        ans?.value ?? 'skipped',
+        ans?.points ?? 0,
+        q.pointsYes,
+      ];
+    });
+    deptName = department.name;
+  } else {
+    // No snapshots and no department — minimal export
+    rows = session.answers.map((a) => [
+      '',
+      a.questionId,
+      a.value ?? 'skipped',
+      a.points,
+      '',
+    ]);
+    deptName = session.departmentId;
+  }
 
   // Fix #27: Pad summary rows to match header column count (5 columns)
   const summary: (string | number | boolean)[][] = [
     ['', '', '', '', ''],
     ['Summary', '', '', '', ''],
-    ['Department', department.name, '', '', ''],
+    ['Department', deptName, '', '', ''],
     ['Date', safeDate, '', '', ''],
     ['Auditor', session.auditorName, '', '', ''],
     ['Score', `${session.percentage}%`, '', '', ''],
     ['Total Points', `${session.totalPoints} / ${session.maxPoints}`, '', '', ''],
   ];
 
-  const filename = `audit-${department.name.toLowerCase().replace(/\s+/g, '-')}-${safeDate.replace(/\//g, '-')}.csv`;
+  const filename = `audit-${deptName.toLowerCase().replace(/\s+/g, '-')}-${safeDate.replace(/\//g, '-')}.csv`;
   downloadCsv(filename, [header, ...rows, ...summary]);
 }

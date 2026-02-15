@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useAppStore } from '@/context';
 import { parseQuestionsCsv, type ParsedQuestion } from '@/lib/import-questions';
+import { captureException } from '@/lib/errorTracking';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -101,7 +102,8 @@ export function QuestionImportDialog({ open, onOpenChange }: QuestionImportDialo
           pointsNo: q.pointsNo,
         });
         imported++;
-      } catch {
+      } catch (err) {
+        captureException(err);
         failures++;
       }
       setState({ step: 'importing', imported: i + 1, total: questions.length });

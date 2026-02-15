@@ -1,6 +1,25 @@
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
+import { logChange } from "./changeLog";
+
+const answerValidator = v.object({
+  questionId: v.string(),
+  value: v.union(
+    v.literal("yes"),
+    v.literal("no"),
+    v.literal("partial"),
+    v.null(),
+  ),
+  points: v.number(),
+  questionText: v.optional(v.string()),
+  questionCriteria: v.optional(v.string()),
+  questionRiskCategory: v.optional(v.string()),
+  questionAnswerType: v.optional(v.union(v.literal("yes_no"), v.literal("yes_no_partial"))),
+  questionPointsYes: v.optional(v.number()),
+  questionPointsPartial: v.optional(v.number()),
+  questionPointsNo: v.optional(v.number()),
+});
 
 export const list = query({
   args: {},
@@ -41,20 +60,7 @@ export const update = mutation({
     auditorId: v.optional(v.string()),
     auditorName: v.optional(v.string()),
     date: v.optional(v.string()),
-    answers: v.optional(
-      v.array(
-        v.object({
-          questionId: v.string(),
-          value: v.union(
-            v.literal("yes"),
-            v.literal("no"),
-            v.literal("partial"),
-            v.null(),
-          ),
-          points: v.number(),
-        }),
-      ),
-    ),
+    answers: v.optional(v.array(answerValidator)),
     totalPoints: v.optional(v.number()),
     maxPoints: v.optional(v.number()),
     percentage: v.optional(v.number()),
@@ -66,6 +72,43 @@ export const update = mutation({
     for (const [key, value] of Object.entries(rest)) {
       if (value !== undefined) patch[key] = value;
     }
+
+    // PCT-20: Inject question snapshots when completing
+    if (rest.completed === true && rest.answers) {
+      const existing = await ctx.db.get(sessionId);
+      if (!existing) throw new Error("Session not found");
+
+      const questions = await ctx.db
+        .query("questions")
+        .withIndex("by_departmentId", (q) => q.eq("departmentId", existing.departmentId))
+        .collect();
+      const qMap = new Map(questions.map((q) => [q._id as string, q]));
+
+      patch.answers = rest.answers.map((a) => {
+        const q = qMap.get(a.questionId);
+        if (!q) return a;
+        return {
+          ...a,
+          questionText: q.text,
+          questionCriteria: q.criteria,
+          questionRiskCategory: q.riskCategory,
+          questionAnswerType: q.answerType,
+          questionPointsYes: q.pointsYes,
+          questionPointsPartial: q.pointsPartial,
+          questionPointsNo: q.pointsNo,
+        };
+      });
+
+      await logChange(ctx, {
+        actorId: existing.auditorId,
+        actorName: existing.auditorName,
+        action: "session.complete",
+        entityType: "session",
+        entityId: sessionId,
+        entityLabel: existing.departmentId,
+      });
+    }
+
     await ctx.db.patch(sessionId, patch);
   },
 });
@@ -73,9 +116,20 @@ export const update = mutation({
 export const remove = mutation({
   args: {
     sessionId: v.id("auditSessions"),
+    actorId: v.optional(v.string()),
+    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { sessionId }) => {
+  handler: async (ctx, { sessionId, actorId, actorName }) => {
+    const existing = await ctx.db.get(sessionId);
     await ctx.db.delete(sessionId);
+    await logChange(ctx, {
+      actorId,
+      actorName,
+      action: "session.remove",
+      entityType: "session",
+      entityId: sessionId,
+      entityLabel: existing?.departmentId,
+    });
   },
 });
 
@@ -86,24 +140,52 @@ export const save = mutation({
     auditorId: v.string(),
     auditorName: v.string(),
     date: v.string(),
-    answers: v.array(
-      v.object({
-        questionId: v.string(),
-        value: v.union(
-          v.literal("yes"),
-          v.literal("no"),
-          v.literal("partial"),
-          v.null(),
-        ),
-        points: v.number(),
-      }),
-    ),
+    answers: v.array(answerValidator),
     totalPoints: v.number(),
     maxPoints: v.number(),
     percentage: v.number(),
     completed: v.boolean(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("auditSessions", args);
+    let answers = args.answers;
+
+    // PCT-20: Inject question snapshots when completing
+    if (args.completed) {
+      const questions = await ctx.db
+        .query("questions")
+        .withIndex("by_departmentId", (q) => q.eq("departmentId", args.departmentId))
+        .collect();
+      const qMap = new Map(questions.map((q) => [q._id as string, q]));
+
+      answers = args.answers.map((a) => {
+        const q = qMap.get(a.questionId);
+        if (!q) return a;
+        return {
+          ...a,
+          questionText: q.text,
+          questionCriteria: q.criteria,
+          questionRiskCategory: q.riskCategory,
+          questionAnswerType: q.answerType,
+          questionPointsYes: q.pointsYes,
+          questionPointsPartial: q.pointsPartial,
+          questionPointsNo: q.pointsNo,
+        };
+      });
+    }
+
+    const id = await ctx.db.insert("auditSessions", { ...args, answers });
+
+    if (args.completed) {
+      await logChange(ctx, {
+        actorId: args.auditorId,
+        actorName: args.auditorName,
+        action: "session.complete",
+        entityType: "session",
+        entityId: id,
+        entityLabel: args.departmentId,
+      });
+    }
+
+    return id;
   },
 });

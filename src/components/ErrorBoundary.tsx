@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { config } from '@/lib/config';
+import { captureException } from '@/lib/errorTracking';
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean; error: Error | null }
@@ -11,7 +13,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, info);
+    captureException(error, { componentStack: info.componentStack ?? undefined });
   }
 
   render() {
@@ -22,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <h1 className="text-xl font-bold mb-2">Something went wrong</h1>
             <p className="text-sm text-muted-foreground mb-4">{this.state.error?.message}</p>
             <button
-              onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/process-control'; }}
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = config.basePath; }}
               className="text-sm text-primary hover:underline"
             >
               Return to Dashboard

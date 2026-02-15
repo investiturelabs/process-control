@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { Role } from '@/types';
 import { track } from '@/lib/analytics';
+import { captureException } from '@/lib/errorTracking';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,16 @@ import {
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+
+function formatTimeRemaining(expiresAt?: string): string | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return 'Expired';
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  if (days > 0) return `Expires in ${days} day${days !== 1 ? 's' : ''}`;
+  return `Expires in ${hours} hour${hours !== 1 ? 's' : ''}`;
+}
 
 export function TeamPage() {
   const {
@@ -55,7 +66,7 @@ export function TeamPage() {
       setInviteError('This email is already a team member.');
       return;
     }
-    if (invitations.some(i => i.email === email && i.status === 'pending')) {
+    if (invitations.some(i => i.email === email)) {
       setInviteError('An invitation is already pending for this email.');
       return;
     }
@@ -67,8 +78,10 @@ export function TeamPage() {
       track({ name: 'user_invited', properties: { role: inviteRole } });
       setInviteEmail('');
       setInviteRole('user');
-    } catch {
-      toast.error('Failed to send invitation.');
+    } catch (err) {
+      captureException(err);
+      const msg = err instanceof Error ? err.message : 'Failed to send invitation.';
+      toast.error(msg);
     } finally {
       setIsInviting(false);
     }
@@ -79,7 +92,8 @@ export function TeamPage() {
     if (value !== 'admin' && value !== 'user') return;
     try {
       await updateUserRole(userId, value);
-    } catch {
+    } catch (err) {
+      captureException(err);
       toast.error('Failed to update role.');
     }
   };
@@ -187,6 +201,7 @@ export function TeamPage() {
                         if (!isInactive) track({ name: 'user_deactivated', properties: {} });
                         toast.success(isInactive ? `Reactivated ${user.name}` : `Deactivated ${user.name}`);
                       } catch (err) {
+                        captureException(err);
                         const msg = err instanceof Error ? err.message : '';
                         toast.error(msg.includes('last admin') ? 'Cannot deactivate the last admin.' : 'Failed to update user status.');
                       } finally {
@@ -237,7 +252,12 @@ export function TeamPage() {
             Pending invitations
           </h2>
           <Card className="divide-y divide-border">
-            {invitations.map((inv) => (
+            {invitations.map((inv) => {
+              const timeRemaining = formatTimeRemaining(inv.expiresAt);
+              const isExpiringSoon = inv.expiresAt
+                ? new Date(inv.expiresAt).getTime() - Date.now() < 2 * 24 * 60 * 60 * 1000
+                : false;
+              return (
               <div
                 key={inv.id}
                 className="flex items-center justify-between px-4 py-3"
@@ -255,6 +275,11 @@ export function TeamPage() {
                       Invited{' '}
                       {new Date(inv.createdAt).toLocaleDateString()}
                       <span className="capitalize">&middot; {inv.role}</span>
+                      {timeRemaining && (
+                        <span className={isExpiringSoon ? 'text-amber-600 font-medium' : ''}>
+                          &middot; {timeRemaining}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -268,7 +293,8 @@ export function TeamPage() {
                       if (!window.confirm(`Remove invitation for ${inv.email}?`)) return;
                       try {
                         await removeInvitation(inv.id);
-                      } catch {
+                      } catch (err) {
+                        captureException(err);
                         toast.error('Failed to remove invitation.');
                       }
                     }}
@@ -277,7 +303,8 @@ export function TeamPage() {
                   </Button>
                 )}
               </div>
-            ))}
+              );
+            })}
           </Card>
         </div>
       )}

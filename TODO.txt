@@ -59,16 +59,12 @@ Here's the production readiness TODO list, organized by priority:
 
   Batch 3: UI Resilience (PCT-5, 6, 10) - done
 
-  Batch 4: Invitations (PCT-13, 26)
-  Both touch convex/invitations.ts and the invitation UI. Build the acceptance flow (13) and add expiration (26) together.
+  Batch 4: Invitations (PCT-13, 26) - done
 
-  Batch 5: Infra & Observability (PCT-7, 16, 17, 27)
-  All deployment/config concerns. Sentry (7), env validation (16), CSP headers (17), and the hardcoded base path (27) can all be addressed in one infra
-  pass.
+  Batch 5: Infra & Observability (PCT-7, 16, 17, 27) - done
 
   Batch 6: UX Polish (PCT-18, 19, 21) - done
 
-  Batch 7: Data Integrity (PCT-14, 20)
-  Audit trail (14) and question versioning (20) both deal with preserving history of changes.
+  Batch 7: Data Integrity (PCT-14, 20) - done
 
   Batch 8: Feature Backlog (PCT-15, 22, 23, 24, 25, 28) - done

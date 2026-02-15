@@ -11,12 +11,21 @@ import {
   ArrowLeft,
   ArrowRight,
   SkipForward,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
 
@@ -60,6 +69,9 @@ export function AuditPage() {
   const [answers, setAnswers] = useState<Map<string, Answer>>(new Map());
   const [animKey, setAnimKey] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSkipDialog, setShowSkipDialog] = useState(false);
+  const [reviewingSkipped, setReviewingSkipped] = useState(false);
+  const [skippedIndices, setSkippedIndices] = useState<number[]>([]);
   const initialized = useRef(false);
 
   // Resume from existing session on mount
@@ -174,43 +186,90 @@ export function AuditPage() {
       // Trigger auto-save
       autoSave();
 
-      setTimeout(() => {
-        setCurrentIndex((i) => {
-          if (i < totalQuestions - 1) {
-            setAnimKey((k) => k + 1);
-            return i + 1;
+      // Remove from skipped list if in review mode
+      if (reviewingSkipped) {
+        setSkippedIndices((prev) => {
+          const updated = prev.filter((i) => i !== currentIndex);
+          if (updated.length === 0) {
+            // All skipped questions answered — exit review mode
+            setReviewingSkipped(false);
           }
-          return i;
+          return updated;
         });
+      }
+
+      setTimeout(() => {
+        if (reviewingSkipped) {
+          // In review mode: advance to next skipped question (if any remain)
+          setSkippedIndices((prev) => {
+            if (prev.length === 0) return prev; // All answered, review mode already exited
+            const nextIdx = prev.find((i) => i > currentIndex) ?? prev[0];
+            setCurrentIndex(nextIdx);
+            setAnimKey((k) => k + 1);
+            return prev;
+          });
+        } else {
+          setCurrentIndex((i) => {
+            if (i < totalQuestions - 1) {
+              setAnimKey((k) => k + 1);
+              return i + 1;
+            }
+            return i;
+          });
+        }
       }, 250);
     },
-    [currentQuestion, totalQuestions, getPoints, autoSave]
+    [currentQuestion, currentIndex, totalQuestions, getPoints, autoSave, reviewingSkipped]
   );
 
   const handlePrev = useCallback(() => {
-    if (currentIndex > 0) {
+    if (reviewingSkipped && skippedIndices.length > 0) {
+      const pos = skippedIndices.indexOf(currentIndex);
+      const prevIdx = pos > 0 ? skippedIndices[pos - 1] : skippedIndices[skippedIndices.length - 1];
+      setCurrentIndex(prevIdx);
+      setAnimKey((k) => k + 1);
+    } else if (currentIndex > 0) {
       setCurrentIndex((i) => i - 1);
       setAnimKey((k) => k + 1);
     }
-  }, [currentIndex]);
+  }, [currentIndex, reviewingSkipped, skippedIndices]);
 
   const handleNext = useCallback(() => {
-    if (currentIndex < totalQuestions - 1) {
+    if (reviewingSkipped && skippedIndices.length > 0) {
+      const pos = skippedIndices.indexOf(currentIndex);
+      const nextIdx = pos < skippedIndices.length - 1 ? skippedIndices[pos + 1] : skippedIndices[0];
+      setCurrentIndex(nextIdx);
+      setAnimKey((k) => k + 1);
+    } else if (currentIndex < totalQuestions - 1) {
       setCurrentIndex((i) => i + 1);
       setAnimKey((k) => k + 1);
     }
-  }, [currentIndex, totalQuestions]);
+  }, [currentIndex, totalQuestions, reviewingSkipped, skippedIndices]);
 
   const handleFinish = async () => {
     if (!dept || !currentUser) return;
 
     const unanswered = totalQuestions - answers.size;
     if (unanswered > 0) {
-      const ok = window.confirm(
-        `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Unanswered questions score 0 points. Continue?`
-      );
-      if (!ok) return;
+      const indices = allQuestions
+        .map((q, i) => (!answers.has(q.id) ? i : -1))
+        .filter((i) => i >= 0);
+      setSkippedIndices(indices);
+      setShowSkipDialog(true);
+      return;
     }
+
+    // Exit review mode if all answered
+    if (reviewingSkipped) {
+      setReviewingSkipped(false);
+      setSkippedIndices([]);
+    }
+
+    await finishAudit();
+  };
+
+  const finishAudit = async () => {
+    if (!dept || !currentUser) return;
 
     const maxPoints = allQuestions.reduce((acc, q) => acc + q.pointsYes, 0);
     const earnedPoints = Array.from(answers.values()).reduce(
@@ -257,6 +316,22 @@ export function AuditPage() {
       toast.error('Failed to save audit. Your answers are still here — please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSubmitAnyway = async () => {
+    setShowSkipDialog(false);
+    setReviewingSkipped(false);
+    setSkippedIndices([]);
+    await finishAudit();
+  };
+
+  const handleReviewSkipped = () => {
+    setShowSkipDialog(false);
+    setReviewingSkipped(true);
+    if (skippedIndices.length > 0) {
+      setCurrentIndex(skippedIndices[0]);
+      setAnimKey((k) => k + 1);
     }
   };
 
@@ -353,6 +428,27 @@ export function AuditPage() {
 
       {/* Progress bar */}
       <Progress value={progress} className="h-1.5 mb-6" />
+
+      {/* Review mode banner */}
+      {reviewingSkipped && skippedIndices.length > 0 && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 mb-4">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>Reviewing skipped questions ({skippedIndices.length} remaining)</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-amber-800 hover:text-amber-900 hover:bg-amber-100 h-7 text-xs"
+            onClick={() => {
+              setReviewingSkipped(false);
+              setSkippedIndices([]);
+            }}
+          >
+            Exit review
+          </Button>
+        </div>
+      )}
 
       {/* Category badge */}
       <div className="mb-3">
@@ -485,7 +581,7 @@ export function AuditPage() {
           variant="ghost"
           size="sm"
           onClick={handlePrev}
-          disabled={currentIndex === 0}
+          disabled={!reviewingSkipped && currentIndex === 0}
           className="gap-1.5"
         >
           <ArrowLeft size={14} />
@@ -493,18 +589,35 @@ export function AuditPage() {
         </Button>
 
         <div className="flex items-center gap-2">
-          {!isLastQuestion && (
-            <Button variant="ghost" size="sm" onClick={handleNext} className="gap-1.5">
-              Skip
-              <SkipForward size={14} />
-            </Button>
-          )}
+          {reviewingSkipped ? (
+            <>
+              {skippedIndices.length > 1 && (
+                <Button variant="ghost" size="sm" onClick={handleNext} className="gap-1.5">
+                  Next skipped
+                  <SkipForward size={14} />
+                </Button>
+              )}
+              <Button onClick={handleFinish} disabled={isSaving} className="gap-1.5">
+                {isSaving ? 'Saving...' : 'Finish audit'}
+                <ArrowRight size={14} />
+              </Button>
+            </>
+          ) : (
+            <>
+              {!isLastQuestion && (
+                <Button variant="ghost" size="sm" onClick={handleNext} className="gap-1.5">
+                  Skip
+                  <SkipForward size={14} />
+                </Button>
+              )}
 
-          {totalQuestions > 0 && (isLastQuestion || answeredCount === totalQuestions) && (
-            <Button onClick={handleFinish} disabled={isSaving} className="gap-1.5">
-              {isSaving ? 'Saving...' : 'Finish audit'}
-              <ArrowRight size={14} />
-            </Button>
+              {totalQuestions > 0 && (isLastQuestion || answeredCount === totalQuestions) && (
+                <Button onClick={handleFinish} disabled={isSaving} className="gap-1.5">
+                  {isSaving ? 'Saving...' : 'Finish audit'}
+                  <ArrowRight size={14} />
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -513,10 +626,10 @@ export function AuditPage() {
       <div className="mt-6 flex flex-wrap gap-1.5 justify-center">
         {allQuestions.map((q, i) => {
           const ans = answers.get(q.id);
-          let dotColor = 'bg-muted';
-          if (ans?.value === 'yes') dotColor = 'bg-emerald-400';
-          else if (ans?.value === 'partial') dotColor = 'bg-amber-400';
-          else if (ans?.value === 'no') dotColor = 'bg-red-400';
+          let dotColor = 'bg-transparent border-2 border-muted-foreground/30';
+          if (ans?.value === 'yes') dotColor = 'bg-emerald-400 border-2 border-transparent';
+          else if (ans?.value === 'partial') dotColor = 'bg-amber-400 border-2 border-transparent';
+          else if (ans?.value === 'no') dotColor = 'bg-red-400 border-2 border-transparent';
 
           return (
             <button
@@ -537,6 +650,26 @@ export function AuditPage() {
           );
         })}
       </div>
+
+      {/* Unanswered questions dialog */}
+      <Dialog open={showSkipDialog} onOpenChange={setShowSkipDialog}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Unanswered questions</DialogTitle>
+            <DialogDescription>
+              You have {skippedIndices.length} unanswered question{skippedIndices.length !== 1 ? 's' : ''}. Unanswered questions score 0 points.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleReviewSkipped}>
+              Review skipped
+            </Button>
+            <Button onClick={handleSubmitAnyway}>
+              Submit anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

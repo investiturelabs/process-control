@@ -135,8 +135,8 @@ export function ResultsPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => navigate('/')}
-              aria-label="Back to dashboard"
+              onClick={() => navigate('/history')}
+              aria-label="Back to history"
             >
               <ArrowLeft size={18} />
             </Button>
@@ -256,9 +256,6 @@ export function ResultsPage() {
           )
         )}
 
-        <div className="mt-6 text-center">
-          <Button onClick={() => navigate('/')}>Back to dashboard</Button>
-        </div>
       </div>
     );
   }
@@ -272,8 +269,8 @@ export function ResultsPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => navigate('/')}
-            aria-label="Back to dashboard"
+            onClick={() => navigate('/history')}
+            aria-label="Back to history"
           >
             <ArrowLeft size={18} />
           </Button>
@@ -376,9 +373,6 @@ export function ResultsPage() {
         })}
       </div>
 
-      <div className="mt-6 text-center">
-        <Button onClick={() => navigate('/')}>Back to dashboard</Button>
-      </div>
     </div>
   );
 }

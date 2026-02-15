@@ -3,7 +3,7 @@ import { usePaginatedQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAppStore } from '@/context';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Select,

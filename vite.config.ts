@@ -34,7 +34,7 @@ function cspPlugin(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const basePath = env.VITE_BASE_PATH || '/process-control/'
+  const basePath = env.VITE_BASE_PATH || '/'
 
   return {
     base: basePath,

@@ -46,7 +46,7 @@ describe('validateEnv', () => {
     const validateEnv = await loadValidateEnv();
     const result = validateEnv();
     expect(result.VITE_CONVEX_URL).toBe('https://example.convex.cloud');
-    expect(result.VITE_BASE_PATH).toBe('/process-control/');
+    expect(result.VITE_BASE_PATH).toBe('/');
     expect(result.VITE_SENTRY_DSN).toBeUndefined();
   });
 

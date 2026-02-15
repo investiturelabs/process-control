@@ -44,7 +44,7 @@ Here's the production readiness TODO list, organized by priority:
   24. User deactivation — No way to disable a user without deleting their audit history.
   25. Data export/backup — No way to export company data for backup.
   26. Invitation expiration — Pending invitations never expire.
-  27. Remove hardcoded base path — vite.config.ts sets base: '/process-control/' which would need changing for other deployment targets.
+  27. Remove hardcoded base path — vite.config.ts sets base: '/' by default, configurable via VITE_BASE_PATH.
   28. Add analytics/event tracking — No usage metrics collection.
 
   ---

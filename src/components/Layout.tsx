@@ -70,7 +70,7 @@ export function Layout() {
                 <ClipboardCheck size={18} className="text-primary-foreground" />
               </div>
               <span className="font-semibold text-sm">
-                {company?.name || 'Process + Control'}
+                {company?.name || 'AuditFlows'}
               </span>
             </div>
           </div>

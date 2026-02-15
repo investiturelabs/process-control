@@ -1,10 +1,10 @@
-# Process + Control
+# AuditFlows
 
-A React web app for managing store audit checklists. Built for retail teams who need to perform weekly Process & Control Reviews (PCR) across departments, score compliance, and track performance over time.
+A React web app for managing store audit checklists. Built for retail teams who need to perform weekly audits across departments, score compliance, and track performance over time.
 
 ## Overview
 
-Process + Control turns a traditional spreadsheet-based audit into an interactive flashcard-style experience. Auditors swipe through questions for each department, tap **Yes**, **No**, or **Partial**, and get an instant score breakdown when they're done. Scores are tracked over time so managers can spot trends and address issues early.
+AuditFlows turns a traditional spreadsheet-based audit into an interactive flashcard-style experience. Auditors swipe through questions for each department, tap **Yes**, **No**, or **Partial**, and get an instant score breakdown when they're done. Scores are tracked over time so managers can spot trends and address issues early.
 
 The app ships pre-loaded with **171 audit questions** across **9 departments**, sourced from a real Sprouts Farmers Market PCR requirements spreadsheet.
 
@@ -144,7 +144,7 @@ All routes except `/login` require authentication.
 ```bash
 # Clone the repo
 git clone <repo-url>
-cd process-control
+cd audit-flows
 
 # Install dependencies
 npm install

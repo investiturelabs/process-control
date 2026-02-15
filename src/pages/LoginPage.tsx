@@ -44,7 +44,7 @@ export function LoginPage() {
           <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/20">
             <ClipboardCheck size={28} className="text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold">Process + Control</h1>
+          <h1 className="text-2xl font-bold">AuditFlows</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Store audit & compliance tracking
           </p>

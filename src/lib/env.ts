@@ -21,7 +21,7 @@ export function validateEnv(): EnvConfig {
     );
   }
 
-  const basePath = import.meta.env.VITE_BASE_PATH || '/process-control/';
+  const basePath = import.meta.env.VITE_BASE_PATH || '/';
   if (!basePath.startsWith('/')) {
     throw new Error(
       `Invalid VITE_BASE_PATH: "${basePath}" must start with "/".`

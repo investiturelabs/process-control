@@ -7,6 +7,7 @@ import {
   Users,
   LogOut,
   ClipboardCheck,
+  ListChecks,
   Menu,
   X,
 } from 'lucide-react';
@@ -21,7 +22,8 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/audit', icon: ClipboardCheck, label: 'Audit' },
   { to: '/history', icon: History, label: 'History' },
-  { to: '/team', icon: Users, label: 'Team' },
+  { to: '/team', icon: Users, label: 'Team', adminOnly: true },
+  { to: '/questions', icon: ListChecks, label: 'Questions', adminOnly: true },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -74,7 +76,7 @@ export function Layout() {
           </div>
 
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => (
+            {navItems.filter(item => !item.adminOnly || currentUser?.role === 'admin').map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -123,7 +125,7 @@ export function Layout() {
           <>
             <Separator />
             <nav aria-label="Mobile navigation" className="md:hidden bg-card px-4 pb-3 pt-2">
-              {navItems.map((item) => (
+              {navItems.filter(item => !item.adminOnly || currentUser?.role === 'admin').map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

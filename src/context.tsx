@@ -11,7 +11,7 @@ import {
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import type { Store } from '@/store-types';
-import type { User, Company, Department, AuditSession, Invitation, Role, Question } from './types';
+import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer } from './types';
 import { seedDepartments } from './seed-data';
 import type { Id } from '../convex/_generated/dataModel';
 import { track, identify } from '@/lib/analytics';
@@ -85,6 +85,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const departmentsData = useQuery(api.departments.listWithQuestions, currentUser ? {} : 'skip');
   const sessionsData = useQuery(api.sessions.list, currentUser ? {} : 'skip');
   const invitationsData = useQuery(api.invitations.list, isAdmin ? {} : 'skip');
+  const savedAnswersData = useQuery(api.savedAnswers.list, currentUser ? {} : 'skip');
 
   // --- Convex mutations (no actorId/actorName — server derives from JWT) ---
   const updateRoleMutation = useMutation(api.users.updateRole);
@@ -105,6 +106,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const generateTestDataMutation = useMutation(api.testData.generate);
   const setActiveMutation = useMutation(api.users.setActive);
   const duplicateDepartmentMutation = useMutation(api.departments.duplicate);
+  const saveSavedAnswerMutation = useMutation(api.savedAnswers.save);
+  const updateSavedAnswerMutation = useMutation(api.savedAnswers.update);
+  const removeSavedAnswerMutation = useMutation(api.savedAnswers.remove);
 
   // --- Loading state ---
   const loading =
@@ -113,6 +117,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     departmentsData === undefined ||
     sessionsData === undefined ||
     (isAdmin && invitationsData === undefined) ||
+    savedAnswersData === undefined ||
     currentUser === null;
 
   // --- Map Convex documents to app types ---
@@ -155,6 +160,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       expiresAt: inv.expiresAt,
     }));
   }, [invitationsData]);
+
+  const savedAnswers = useMemo<SavedAnswer[]>(() => {
+    return (savedAnswersData ?? []).map((sa) => ({
+      id: sa._id as string,
+      questionId: sa.questionId,
+      departmentId: sa.departmentId,
+      value: sa.value,
+      expiresAt: sa.expiresAt,
+      note: sa.note,
+      savedBy: sa.savedBy,
+      savedByName: sa.savedByName,
+      createdAt: sa.createdAt,
+      updatedAt: sa.updatedAt,
+    }));
+  }, [savedAnswersData]);
 
   // --- Sync currentUser with Convex data (role changes, deactivation, etc.) ---
   useEffect(() => {
@@ -326,6 +346,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [duplicateDepartmentMutation],
   );
 
+  const saveSavedAnswer = useCallback(
+    async (data: { questionId: string; departmentId: string; value: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => {
+      await saveSavedAnswerMutation({ ...data });
+    },
+    [saveSavedAnswerMutation],
+  );
+
+  const updateSavedAnswer = useCallback(
+    async (savedAnswerId: string, data: { value?: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => {
+      await updateSavedAnswerMutation({ savedAnswerId: savedAnswerId as Id<'savedAnswers'>, ...data });
+    },
+    [updateSavedAnswerMutation],
+  );
+
+  const removeSavedAnswer = useCallback(
+    async (savedAnswerId: string) => {
+      await removeSavedAnswerMutation({ savedAnswerId: savedAnswerId as Id<'savedAnswers'> });
+    },
+    [removeSavedAnswerMutation],
+  );
+
+
   const store = useMemo<Store>(() => ({
     currentUser,
     users,
@@ -333,6 +375,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     departments,
     sessions,
     invitations,
+    savedAnswers,
     loading,
     setCompany,
     updateDepartments,
@@ -351,14 +394,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     generateTestData,
     setUserActive,
     duplicateDepartment,
+    saveSavedAnswer,
+    updateSavedAnswer,
+    removeSavedAnswer,
   }), [
-    currentUser, users, company, departments, sessions, invitations, loading,
+    currentUser, users, company, departments, sessions, invitations, savedAnswers, loading,
     setCompany, updateDepartments, saveSession,
     inviteUser, updateUserRole, removeInvitation,
     addQuestion, updateQuestion, removeQuestion,
     addDepartment, updateDepartment, removeDepartment,
     updateSession, removeSession, generateTestData,
     setUserActive, duplicateDepartment,
+    saveSavedAnswer, updateSavedAnswer, removeSavedAnswer,
   ]);
 
   // Show sync error UI

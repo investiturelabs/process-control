@@ -86,3 +86,16 @@ export interface ChangeLogEntry {
   entityLabel?: string;
   details?: string;
 }
+
+export interface SavedAnswer {
+  id: string;
+  questionId: string;
+  departmentId: string;
+  value: 'yes' | 'no' | 'partial';
+  expiresAt?: string;
+  note?: string;
+  savedBy: string;
+  savedByName: string;
+  createdAt: string;
+  updatedAt: string;
+}

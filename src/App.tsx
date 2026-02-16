@@ -14,6 +14,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { QuestionsPage } from '@/pages/QuestionsPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
+import { SavedAnswersPage } from '@/pages/SavedAnswersPage';
 import { Layout } from '@/components/Layout';
 
 function AuthPage() {
@@ -118,6 +119,7 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="questions" element={<QuestionsPage />} />
+        <Route path="saved-answers" element={<SavedAnswersPage />} />
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

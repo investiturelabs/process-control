@@ -95,4 +95,17 @@ export default defineSchema({
     expiresAt: v.optional(v.string()),
   }).index("by_email", ["email"])
     .index("by_status", ["status"]),
+
+  savedAnswers: defineTable({
+    questionId: v.string(),
+    departmentId: v.string(),
+    value: v.union(v.literal("yes"), v.literal("no"), v.literal("partial")),
+    expiresAt: v.optional(v.string()),
+    note: v.optional(v.string()),
+    savedBy: v.string(),
+    savedByName: v.string(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_questionId", ["questionId"])
+    .index("by_departmentId", ["departmentId"]),
 });

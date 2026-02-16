@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuditPage } from '../AuditPage';
 import type { Store } from '@/store-types';
-import type { Department } from '@/types';
+import type { Department, SavedAnswer } from '@/types';
 
 // Mock react-router-dom
 const mockNavigate = vi.fn();
@@ -22,6 +22,12 @@ vi.mock('@/components/DeptIcon', () => ({
   DeptIcon: ({ name }: { name: string }) => <span data-testid="dept-icon">{name}</span>,
 }));
 
+// Mock SaveAnswerDialog to avoid complex rendering
+vi.mock('@/components/SaveAnswerDialog', () => ({
+  SaveAnswerDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="save-answer-dialog">Save Answer Dialog</div> : null,
+}));
+
 // Mock context
 const mockStore: Partial<Store> = {};
 vi.mock('@/context', () => ({
@@ -32,10 +38,13 @@ function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
     departments: [],
     sessions: [],
+    savedAnswers: [],
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'user' as const, avatarColor: '#000' },
     company: { id: 'c1', name: 'Test Co' },
     saveSession: vi.fn(),
     updateSession: vi.fn(),
+    saveSavedAnswer: vi.fn(),
+    removeSavedAnswer: vi.fn(),
     ...overrides,
   });
 }
@@ -236,5 +245,189 @@ describe('AuditPage', () => {
       !!element.textContent?.includes('Navigate')
     );
     expect(hint.textContent).not.toContain('Partial');
+  });
+
+  // --- Saved Answers Tests ---
+
+  it('auto-fills answers from non-expired saved answers on fresh audit', () => {
+    const dept = makeDept(3);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+      { id: 'sa2', questionId: 'q1', departmentId: 'dept-test', value: 'no', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    // q0 should be auto-filled yes (green), q1 should be auto-filled no (red)
+    const dots = screen.getAllByLabelText(/Go to question/);
+    const firstDot = dots[0].querySelector('div');
+    expect(firstDot?.className).toContain('bg-emerald');
+    const secondDot = dots[1].querySelector('div');
+    expect(secondDot?.className).toContain('bg-red');
+    // q2 should be unanswered
+    const thirdDot = dots[2].querySelector('div');
+    expect(thirdDot?.className).toContain('bg-transparent');
+  });
+
+  it('does NOT auto-fill expired saved answers', () => {
+    const dept = makeDept(2);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', expiresAt: '2020-01-01T00:00:00.000Z', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    // q0 should NOT be auto-filled (expired)
+    const dots = screen.getAllByLabelText(/Go to question/);
+    const firstDot = dots[0].querySelector('div');
+    expect(firstDot?.className).toContain('bg-transparent');
+  });
+
+  it('shows Auto-filled badge when question was auto-populated', () => {
+    const dept = makeDept(2);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    expect(screen.getByText('Auto-filled')).toBeInTheDocument();
+  });
+
+  it('shows expired saved answer warning banner', () => {
+    const dept = makeDept(1);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', expiresAt: '2020-06-15T00:00:00.000Z', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    expect(screen.getByText(/Saved answer expired on/)).toBeInTheDocument();
+  });
+
+  it('shows saved answer note on flashcard', () => {
+    const dept = makeDept(1);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', note: 'Valid until 2028', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    expect(screen.getByText('Valid until 2028')).toBeInTheDocument();
+  });
+
+  it('shows pin button after answering a question', async () => {
+    setStore({ departments: [makeDept(2)], sessions: [] });
+    const user = userEvent.setup();
+    render(<AuditPage />);
+
+    // No pin button before answering
+    expect(screen.queryByText('Save this answer')).not.toBeInTheDocument();
+
+    // Answer the question
+    await user.keyboard('y');
+
+    // Pin button should appear (on next question since we auto-advance,
+    // but the first question should have been answered)
+    // Navigate back to see the answered question
+    await user.keyboard('{ArrowLeft}');
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Save this answer')).toBeInTheDocument();
+    });
+  });
+
+  it('shows "Saved — tap to edit" when saved answer exists for current question', async () => {
+    const dept = makeDept(1);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    // Auto-filled, so there's an answer — pin should show "Saved — tap to edit"
+    expect(screen.getByText('Saved — tap to edit')).toBeInTheDocument();
+  });
+
+  it('dot-pinned class applied to dots with saved answers', () => {
+    const dept = makeDept(3);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    const dots = screen.getAllByLabelText(/Go to question/);
+    // First dot (q0) has saved answer — should have dot-pinned class
+    const firstDot = dots[0].querySelector('div');
+    expect(firstDot?.className).toContain('dot-pinned');
+    // Second dot (q1) has no saved answer
+    const secondDot = dots[1].querySelector('div');
+    expect(secondDot?.className).not.toContain('dot-pinned');
+  });
+
+  it('does not auto-fill saved answers from different department', () => {
+    const dept = makeDept(2);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'other-dept', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    render(<AuditPage />);
+
+    const dots = screen.getAllByLabelText(/Go to question/);
+    const firstDot = dots[0].querySelector('div');
+    expect(firstDot?.className).toContain('bg-transparent');
+  });
+
+  it('resume session takes priority over auto-fill', () => {
+    const dept = makeDept(3);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    const existingSession = {
+      id: 'sess1',
+      companyId: 'c1',
+      departmentId: 'dept-test',
+      auditorId: 'u1',
+      auditorName: 'Test User',
+      date: '2025-01-01',
+      answers: [{ questionId: 'q0', value: 'no' as const, points: 0 }],
+      totalPoints: 0,
+      maxPoints: 30,
+      percentage: 0,
+      completed: false,
+    };
+    setStore({ departments: [dept], sessions: [existingSession], savedAnswers });
+    render(<AuditPage />);
+
+    // Should show the session's answer (no/red) not the saved answer (yes/green)
+    const dots = screen.getAllByLabelText(/Go to question/);
+    const firstDot = dots[0].querySelector('div');
+    expect(firstDot?.className).toContain('bg-red');
+    // Auto-filled badge should NOT appear since we resumed
+    expect(screen.queryByText('Auto-filled')).not.toBeInTheDocument();
+  });
+
+  it('removing auto-filled answer clears auto-filled badge', async () => {
+    const dept = makeDept(2);
+    const savedAnswers: SavedAnswer[] = [
+      { id: 'sa1', questionId: 'q0', departmentId: 'dept-test', value: 'yes', savedBy: 'u1', savedByName: 'Tester', createdAt: '2025-01-01T00:00:00.000Z', updatedAt: '2025-01-01T00:00:00.000Z' },
+    ];
+    setStore({ departments: [dept], sessions: [], savedAnswers });
+    const user = userEvent.setup();
+    render(<AuditPage />);
+
+    // Should show Auto-filled initially
+    expect(screen.getByText('Auto-filled')).toBeInTheDocument();
+
+    // Change the answer — should remove auto-filled status
+    await user.keyboard('n');
+
+    // Navigate back to q0
+    await user.keyboard('{ArrowLeft}');
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Auto-filled')).not.toBeInTheDocument();
+    });
   });
 });

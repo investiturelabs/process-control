@@ -8,6 +8,7 @@ import {
   Users,
   ClipboardCheck,
   ListChecks,
+  Pin,
   Menu,
   X,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ const navItems = [
   { to: '/history', icon: History, label: 'History' },
   { to: '/team', icon: Users, label: 'Team', adminOnly: true },
   { to: '/questions', icon: ListChecks, label: 'Questions', adminOnly: true },
+  { to: '/saved-answers', icon: Pin, label: 'Saved Answers', adminOnly: true },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

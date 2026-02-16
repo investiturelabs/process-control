@@ -1,4 +1,4 @@
-import type { User, Company, Department, AuditSession, Invitation, Role, Question } from './types';
+import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer } from './types';
 
 export interface Store {
   currentUser: User | null;
@@ -7,6 +7,7 @@ export interface Store {
   departments: Department[];
   sessions: AuditSession[];
   invitations: Invitation[];
+  savedAnswers: SavedAnswer[];
   loading: boolean;
   setCompany: (c: Company) => Promise<void>;
   updateDepartments: (deps: Department[]) => Promise<void>;
@@ -25,4 +26,7 @@ export interface Store {
   generateTestData: () => Promise<void>;
   setUserActive: (userId: string, active: boolean) => Promise<void>;
   duplicateDepartment: (stableId: string) => Promise<string>;
+  saveSavedAnswer: (data: { questionId: string; departmentId: string; value: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => Promise<void>;
+  updateSavedAnswer: (savedAnswerId: string, data: { value?: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => Promise<void>;
+  removeSavedAnswer: (savedAnswerId: string) => Promise<void>;
 }

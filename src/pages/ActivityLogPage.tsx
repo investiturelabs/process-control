@@ -22,6 +22,7 @@ const ENTITY_TYPES = [
   { value: 'session', label: 'Sessions' },
   { value: 'company', label: 'Company' },
   { value: 'invitation', label: 'Invitations' },
+  { value: 'savedAnswer', label: 'Saved Answers' },
 ] as const;
 
 const ACTION_LABELS: Record<string, string> = {
@@ -43,6 +44,9 @@ const ACTION_LABELS: Record<string, string> = {
   'invitation.create': 'invited',
   'invitation.remove': 'revoked invitation for',
   'invitation.expiredCleanup': 'expired invitations cleaned up',
+  'savedAnswer.create': 'saved answer for',
+  'savedAnswer.update': 'updated saved answer for',
+  'savedAnswer.remove': 'removed saved answer for',
 };
 
 function formatAction(action: string, actorName?: string, entityLabel?: string): string {

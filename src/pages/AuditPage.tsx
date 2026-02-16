@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
-import type { Answer, AnswerValue, Question } from '@/types';
+import type { Answer, AnswerValue, Question, SavedAnswer } from '@/types';
+import { SaveAnswerDialog } from '@/components/SaveAnswerDialog';
 import { toast } from 'sonner';
 import {
   CheckCircle2,
@@ -12,6 +13,8 @@ import {
   ArrowRight,
   SkipForward,
   AlertTriangle,
+  Pin,
+  StickyNote,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,7 +35,7 @@ import { captureException } from '@/lib/errorTracking';
 export function AuditPage() {
   const { departmentId } = useParams<{ departmentId: string }>();
   const navigate = useNavigate();
-  const { departments, currentUser, sessions, saveSession, updateSession, company } = useAppStore();
+  const { departments, currentUser, sessions, saveSession, updateSession, company, savedAnswers, saveSavedAnswer, removeSavedAnswer } = useAppStore();
 
   const dept = departments.find((d) => d.id === departmentId);
 
@@ -63,6 +66,23 @@ export function AuditPage() {
     [categories]
   );
 
+  const savedAnswerMap = useMemo(() => {
+    const map = new Map<string, SavedAnswer>();
+    for (const sa of savedAnswers) {
+      if (sa.departmentId === departmentId) map.set(sa.questionId, sa);
+    }
+    return map;
+  }, [savedAnswers, departmentId]);
+
+  const getPoints = useCallback(
+    (question: Question, value: AnswerValue): number => {
+      if (value === 'yes') return question.pointsYes;
+      if (value === 'partial') return question.pointsPartial;
+      return question.pointsNo;
+    },
+    []
+  );
+
   // Initialize from existing session if resuming
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -72,29 +92,43 @@ export function AuditPage() {
   const [showSkipDialog, setShowSkipDialog] = useState(false);
   const [reviewingSkipped, setReviewingSkipped] = useState(false);
   const [skippedIndices, setSkippedIndices] = useState<number[]>([]);
+  const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const initialized = useRef(false);
 
-  // Resume from existing session on mount
+  // Combined init: resume from session OR auto-fill from saved answers
   useEffect(() => {
-    if (initialized.current || !existingSession || allQuestions.length === 0) return;
-    initialized.current = true;
+    if (initialized.current || allQuestions.length === 0) return;
 
-    setSessionId(existingSession.id);
-    const restoredAnswers = new Map<string, Answer>();
-    for (const a of existingSession.answers) {
-      restoredAnswers.set(a.questionId, a);
-    }
-    setAnswers(restoredAnswers);
-
-    // Position at the first unanswered question
-    const firstUnanswered = allQuestions.findIndex((q) => !restoredAnswers.has(q.id));
-    if (firstUnanswered >= 0) {
-      setCurrentIndex(firstUnanswered);
+    if (existingSession) {
+      // RESUME: restore answers from in-progress session
+      initialized.current = true;
+      setSessionId(existingSession.id);
+      const restoredAnswers = new Map<string, Answer>();
+      for (const a of existingSession.answers) {
+        restoredAnswers.set(a.questionId, a);
+      }
+      setAnswers(restoredAnswers);
+      const firstUnanswered = allQuestions.findIndex((q) => !restoredAnswers.has(q.id));
+      setCurrentIndex(firstUnanswered >= 0 ? firstUnanswered : allQuestions.length - 1);
     } else {
-      // All answered — go to last question
-      setCurrentIndex(allQuestions.length - 1);
+      // FRESH AUDIT: auto-fill from non-expired saved answers
+      initialized.current = true;
+      const prePopulated = new Map<string, Answer>();
+      const autoFilled = new Set<string>();
+      for (const q of allQuestions) {
+        const sa = savedAnswerMap.get(q.id);
+        if (!sa) continue;
+        if (sa.expiresAt && new Date(sa.expiresAt) <= new Date()) continue;
+        prePopulated.set(q.id, { questionId: q.id, value: sa.value, points: getPoints(q, sa.value) });
+        autoFilled.add(q.id);
+      }
+      if (prePopulated.size > 0) {
+        setAnswers(prePopulated);
+        setAutoFilledIds(autoFilled);
+      }
     }
-  }, [existingSession, allQuestions]);
+  }, [existingSession, allQuestions, savedAnswerMap, getPoints]);
 
   // Debounced auto-save
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -158,15 +192,6 @@ export function AuditPage() {
     return currentQuestion.riskCategory;
   }, [currentQuestion]);
 
-  const getPoints = useCallback(
-    (question: Question, value: AnswerValue): number => {
-      if (value === 'yes') return question.pointsYes;
-      if (value === 'partial') return question.pointsPartial;
-      return question.pointsNo;
-    },
-    []
-  );
-
   const handleAnswer = useCallback(
     (value: AnswerValue) => {
       if (!currentQuestion) return;
@@ -180,6 +205,15 @@ export function AuditPage() {
         });
         return next;
       });
+
+      // Remove from auto-filled tracking if overriding
+      if (autoFilledIds.has(currentQuestion.id)) {
+        setAutoFilledIds((prev) => {
+          const next = new Set(prev);
+          next.delete(currentQuestion.id);
+          return next;
+        });
+      }
 
       // Trigger auto-save
       autoSave();
@@ -217,7 +251,7 @@ export function AuditPage() {
         }
       }, 250);
     },
-    [currentQuestion, currentIndex, totalQuestions, getPoints, autoSave, reviewingSkipped]
+    [currentQuestion, currentIndex, totalQuestions, getPoints, autoSave, reviewingSkipped, autoFilledIds]
   );
 
   const handlePrev = useCallback(() => {
@@ -446,10 +480,30 @@ export function AuditPage() {
         </div>
       )}
 
-      {/* Category badge */}
-      <div className="mb-3">
+      {/* Category badge + auto-filled indicator */}
+      <div className="mb-3 flex items-center gap-2">
         <Badge variant="secondary">{currentCategory}</Badge>
+        {currentQuestion && autoFilledIds.has(currentQuestion.id) && (
+          <Badge variant="secondary" className="bg-primary/10 text-primary gap-1">
+            <Pin size={10} />
+            Auto-filled
+          </Badge>
+        )}
       </div>
+
+      {/* Expired saved answer warning */}
+      {currentQuestion && (() => {
+        const sa = savedAnswerMap.get(currentQuestion.id);
+        if (sa?.expiresAt && new Date(sa.expiresAt) <= new Date()) {
+          return (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 mb-4 text-sm text-amber-800">
+              <AlertTriangle size={16} className="shrink-0" />
+              <span>Saved answer expired on {new Date(sa.expiresAt).toLocaleDateString()}. Answer manually.</span>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Flashcard */}
       {currentQuestion && (
@@ -463,6 +517,19 @@ export function AuditPage() {
                 {currentQuestion.criteria}
               </p>
             )}
+            {/* Saved answer note */}
+            {(() => {
+              const sa = savedAnswerMap.get(currentQuestion.id);
+              if (sa?.note) {
+                return (
+                  <div className="mt-2 flex items-start gap-1.5 text-sm text-muted-foreground">
+                    <StickyNote size={14} className="shrink-0 mt-0.5" />
+                    <span>{sa.note}</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
               <span>Full: {currentQuestion.pointsYes} pts</span>
               {currentQuestion.answerType === 'yes_no_partial' && (
@@ -567,6 +634,20 @@ export function AuditPage() {
               {' '}<kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">&larr;</kbd>
               <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">&rarr;</kbd> Navigate
             </p>
+            {/* Pin button — only visible when answered */}
+            {currentAnswer && (
+              <div className="mt-3 flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                  onClick={() => setShowSaveDialog(true)}
+                >
+                  <Pin size={14} />
+                  {savedAnswerMap.has(currentQuestion.id) ? 'Saved — tap to edit' : 'Save this answer'}
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -627,6 +708,7 @@ export function AuditPage() {
           else if (ans?.value === 'partial') dotColor = 'bg-amber-400 border-2 border-transparent';
           else if (ans?.value === 'no') dotColor = 'bg-red-400 border-2 border-transparent';
 
+          const hasSaved = savedAnswerMap.has(q.id);
           return (
             <button
               key={q.id}
@@ -640,7 +722,7 @@ export function AuditPage() {
               <div
                 className={`w-2.5 h-2.5 rounded-full transition-all ${dotColor} ${
                   i === currentIndex ? 'ring-2 ring-primary ring-offset-1' : ''
-                }`}
+                } ${hasSaved ? 'relative dot-pinned' : ''}`}
               />
             </button>
           );
@@ -666,6 +748,21 @@ export function AuditPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Save answer dialog */}
+      {currentQuestion && currentAnswer && (
+        <SaveAnswerDialog
+          open={showSaveDialog}
+          onOpenChange={setShowSaveDialog}
+          questionId={currentQuestion.id}
+          questionText={currentQuestion.text}
+          departmentId={departmentId!}
+          currentValue={currentAnswer as 'yes' | 'no' | 'partial'}
+          existingSavedAnswer={savedAnswerMap.get(currentQuestion.id) ?? null}
+          onSave={saveSavedAnswer}
+          onRemove={removeSavedAnswer}
+        />
+      )}
     </div>
   );
 }

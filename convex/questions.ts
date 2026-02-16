@@ -134,6 +134,15 @@ export const remove = mutation({
     const old = await ctx.db.get(questionId);
     await ctx.db.delete(questionId);
 
+    // Cascade: delete any saved answer for this question
+    const savedAnswer = await ctx.db
+      .query("savedAnswers")
+      .withIndex("by_questionId", (q) => q.eq("questionId", questionId))
+      .first();
+    if (savedAnswer) {
+      await ctx.db.delete(savedAnswer._id);
+    }
+
     await logChange(ctx, {
       actorId: admin._id,
       actorName: admin.name,

@@ -200,7 +200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const saveSession = useCallback(
-    async (session: Omit<AuditSession, 'id'>): Promise<string> => {
+    async (session: Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>): Promise<string> => {
       const id = await saveSessionMutation({
         companyId: session.companyId,
         departmentId: session.departmentId,

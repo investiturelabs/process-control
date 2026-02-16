@@ -1,6 +1,6 @@
 /** Shared test utilities for Convex backend tests */
 
-export const modules = import.meta.glob('../**/*.ts');
+export const modules = import.meta.glob('../../convex/**/*.ts');
 
 /** Creates a Clerk-like identity for convex-test */
 export function clerkIdentity(opts: { name?: string; email?: string; id?: string }) {

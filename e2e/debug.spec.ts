@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/process-control';
+const BASE = process.env.VITE_BASE_PATH || '';
 
 test('debug sign-in page', async ({ page }) => {
   const logs: string[] = [];

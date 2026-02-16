@@ -6,7 +6,7 @@ import {
   validateUrl,
   validatePoints,
   MAX_LENGTHS,
-} from '../validators';
+} from '../../../convex/lib/validators';
 
 describe('sanitize', () => {
   it('trims whitespace and returns cleaned value', () => {

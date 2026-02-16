@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 // Must be before component import
 const mockLocation = { pathname: '/' };
@@ -10,9 +9,8 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => mockLocation,
 }));
 
-const mockSignOut = vi.fn();
 vi.mock('@clerk/clerk-react', () => ({
-  useClerk: () => ({ signOut: mockSignOut }),
+  UserButton: () => <div data-testid="clerk-user-button" />,
 }));
 
 vi.mock('@/lib/analytics', () => ({ track: vi.fn() }));
@@ -40,7 +38,7 @@ function setStore(overrides: Partial<Store>) {
 
 describe('Layout', () => {
   beforeEach(() => {
-    mockSignOut.mockReset();
+    vi.clearAllMocks();
   });
 
   it('renders nav links for all pages', () => {
@@ -59,19 +57,10 @@ describe('Layout', () => {
     expect(screen.getByText('Test Company')).toBeInTheDocument();
   });
 
-  it('shows user name and avatar', () => {
+  it('renders Clerk UserButton', () => {
     setStore({});
     render(<Layout />);
-    expect(screen.getByText('Test User')).toBeInTheDocument();
-    expect(screen.getByText('T')).toBeInTheDocument(); // Avatar fallback
-  });
-
-  it('logout button calls signOut', async () => {
-    const user = userEvent.setup();
-    setStore({});
-    render(<Layout />);
-    await user.click(screen.getByLabelText('Sign out'));
-    expect(mockSignOut).toHaveBeenCalled();
+    expect(screen.getByTestId('clerk-user-button')).toBeInTheDocument();
   });
 
   it('shows loading spinner when loading', () => {
@@ -86,5 +75,16 @@ describe('Layout', () => {
     render(<Layout />);
     expect(screen.getByTestId('outlet')).toBeInTheDocument();
     expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument();
+  });
+
+  it('hides admin nav links for non-admin users', () => {
+    setStore({
+      currentUser: { id: 'u2', name: 'Regular', email: 'user@test.com', role: 'user', avatarColor: '#000' },
+    });
+    render(<Layout />);
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Audit')).toBeInTheDocument();
+    expect(screen.queryByText('Team')).not.toBeInTheDocument();
+    expect(screen.queryByText('Questions')).not.toBeInTheDocument();
   });
 });

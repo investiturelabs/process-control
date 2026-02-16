@@ -6,11 +6,11 @@ import tailwindcss from '@tailwindcss/vite'
 function cspPlugin(): Plugin {
   const csp = [
     "default-src 'self'",
-    "script-src 'self' https://*.clerk.accounts.dev",
+    "script-src 'self' https://*.clerk.accounts.dev https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: https://img.clerk.com",
-    "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.ingest.sentry.io https://*.clerk.accounts.dev https://*.clerk.com",
+    "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.ingest.sentry.io https://*.clerk.accounts.dev https://*.clerk.com https://cloudflareinsights.com",
     "worker-src 'self' blob:",
     "frame-src 'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com",
     "object-src 'none'",

@@ -20,7 +20,17 @@ try {
 
   createRoot(root).render(
     <StrictMode>
-      <ClerkProvider publishableKey={config.clerkPublishableKey}>
+      <ClerkProvider
+        publishableKey={config.clerkPublishableKey}
+        appearance={{
+          variables: {
+            colorPrimary: '#2563eb',
+            colorText: '#1e293b',
+            fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+            borderRadius: '0.625rem',
+          },
+        }}
+      >
         <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
           <App />
         </ConvexProviderWithClerk>

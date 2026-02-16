@@ -5,7 +5,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { DeptIcon } from '@/components/DeptIcon';
 import { DateRangePills } from '@/components/DateRangePills';
 import { DepartmentFilter } from '@/components/DepartmentFilter';
-import { BarChart3, TrendingUp, Target, Calendar, Download } from 'lucide-react';
+import { BarChart3, TrendingUp, Target, Calendar, Download, Bell, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { getScoreColor } from '@/lib/score-colors';
@@ -40,7 +40,7 @@ const DEPT_COLORS = [
 ];
 
 export function DashboardPage() {
-  const { sessions, departments, currentUser } = useAppStore();
+  const { sessions, departments, currentUser, reminders } = useAppStore();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [filterDept, setFilterDept] = useState<string>('all');
@@ -198,6 +198,20 @@ export function DashboardPage() {
     return allAvgs.length > 0 ? Math.min(60, Math.min(...allAvgs) - 5) : 60;
   }, [monthlyTrend]);
 
+  const { reminderOverdue, reminderToday } = useMemo(() => {
+    let overdue = 0;
+    let today = 0;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    for (const r of reminders) {
+      const due = new Date(r.nextDueAt);
+      const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+      if (dueDay < todayStart) overdue++;
+      else if (dueDay.getTime() === todayStart.getTime()) today++;
+    }
+    return { reminderOverdue: overdue, reminderToday: today };
+  }, [reminders]);
+
   if (completedSessions.length === 0) {
     return (
       <div className="space-y-6">
@@ -209,6 +223,34 @@ export function DashboardPage() {
             Review audit trends and department performance
           </p>
         </div>
+
+        {(reminderOverdue > 0 || reminderToday > 0) && (
+          <Card
+            className={`cursor-pointer transition-colors hover:bg-accent/50 ${
+              reminderOverdue > 0 ? 'border-red-200 bg-red-50/30' : 'border-amber-200 bg-amber-50/30'
+            }`}
+            onClick={() => navigate('/reminders')}
+          >
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                reminderOverdue > 0 ? 'bg-red-100' : 'bg-amber-100'
+              }`}>
+                <Bell size={20} className={reminderOverdue > 0 ? 'text-red-700' : 'text-amber-700'} />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${reminderOverdue > 0 ? 'text-red-900' : 'text-amber-900'}`}>
+                  {reminderOverdue > 0 && <>{reminderOverdue} overdue reminder{reminderOverdue !== 1 ? 's' : ''}</>}
+                  {reminderOverdue > 0 && reminderToday > 0 && ' · '}
+                  {reminderToday > 0 && <>{reminderToday} due today</>}
+                </p>
+                <p className={`text-xs ${reminderOverdue > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+                  Click to view reminders
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="text-center py-16">
           <p className="text-muted-foreground text-sm">No audits completed yet.</p>
           <Button variant="link" onClick={() => navigate('/audit')} className="mt-3">
@@ -287,6 +329,37 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Reminders summary widget */}
+      {(reminderOverdue > 0 || reminderToday > 0) && (
+        <Card
+          className={`cursor-pointer transition-colors hover:bg-accent/50 ${
+            reminderOverdue > 0 ? 'border-red-200 bg-red-50/30' : 'border-amber-200 bg-amber-50/30'
+          }`}
+          onClick={() => navigate('/reminders')}
+        >
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              reminderOverdue > 0 ? 'bg-red-100' : 'bg-amber-100'
+            }`}>
+              {reminderOverdue > 0
+                ? <AlertTriangle size={20} className="text-red-700" />
+                : <Bell size={20} className="text-amber-700" />
+              }
+            </div>
+            <div>
+              <p className={`text-sm font-semibold ${reminderOverdue > 0 ? 'text-red-900' : 'text-amber-900'}`}>
+                {reminderOverdue > 0 && <>{reminderOverdue} overdue reminder{reminderOverdue !== 1 ? 's' : ''}</>}
+                {reminderOverdue > 0 && reminderToday > 0 && ' · '}
+                {reminderToday > 0 && <>{reminderToday} due today</>}
+              </p>
+              <p className={`text-xs ${reminderOverdue > 0 ? 'text-red-700' : 'text-amber-700'}`}>
+                Click to view reminders
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Best dept callout */}
       {bestDept && (

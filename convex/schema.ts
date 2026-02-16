@@ -108,4 +108,39 @@ export default defineSchema({
     updatedAt: v.string(),
   }).index("by_questionId", ["questionId"])
     .index("by_departmentId", ["departmentId"]),
+
+  reminders: defineTable({
+    questionId: v.optional(v.string()),
+    departmentId: v.optional(v.string()),
+    title: v.string(),
+    description: v.optional(v.string()),
+    frequency: v.union(
+      v.literal("daily"),
+      v.literal("weekly"),
+      v.literal("biweekly"),
+      v.literal("monthly"),
+      v.literal("quarterly"),
+      v.literal("annually"),
+      v.literal("custom"),
+    ),
+    customDays: v.optional(v.number()),
+    lastCompletedAt: v.optional(v.string()),
+    lastCompletedBy: v.optional(v.string()),
+    lastCompletedByName: v.optional(v.string()),
+    nextDueAt: v.string(),
+    createdBy: v.string(),
+    createdByName: v.string(),
+    createdAt: v.string(),
+    active: v.boolean(),
+  }).index("by_active", ["active"])
+    .index("by_questionId", ["questionId"])
+    .index("by_departmentId", ["departmentId"]),
+
+  reminderCompletions: defineTable({
+    reminderId: v.string(),
+    completedAt: v.string(),
+    completedBy: v.string(),
+    completedByName: v.string(),
+    note: v.optional(v.string()),
+  }).index("by_reminderId", ["reminderId"]),
 });

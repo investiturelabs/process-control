@@ -14,6 +14,7 @@ import { HistoryPage } from '@/pages/HistoryPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { QuestionsPage } from '@/pages/QuestionsPage';
+import { RemindersPage } from '@/pages/RemindersPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { Layout } from '@/components/Layout';
 
@@ -115,6 +116,7 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="questions" element={<QuestionsPage />} />
+        <Route path="reminders" element={<RemindersPage />} />
         <Route path="saved-answers" element={<Navigate to="/questions" replace />} />
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

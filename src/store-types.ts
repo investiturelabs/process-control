@@ -1,4 +1,4 @@
-import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer } from './types';
+import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer, Reminder, ReminderFrequency } from './types';
 
 export interface Store {
   currentUser: User | null;
@@ -29,4 +29,9 @@ export interface Store {
   saveSavedAnswer: (data: { questionId: string; departmentId: string; value: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => Promise<void>;
   updateSavedAnswer: (savedAnswerId: string, data: { value?: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => Promise<void>;
   removeSavedAnswer: (savedAnswerId: string) => Promise<void>;
+  reminders: Reminder[];
+  createReminder: (data: { title: string; description?: string; frequency: ReminderFrequency; customDays?: number; questionId?: string; departmentId?: string; startDate: string }) => Promise<string>;
+  updateReminder: (reminderId: string, data: { title?: string; description?: string; frequency?: ReminderFrequency; customDays?: number; questionId?: string; departmentId?: string; active?: boolean }) => Promise<void>;
+  removeReminder: (reminderId: string) => Promise<void>;
+  completeReminder: (reminderId: string, note?: string) => Promise<void>;
 }

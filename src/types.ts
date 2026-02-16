@@ -99,3 +99,39 @@ export interface SavedAnswer {
   createdAt: string;
   updatedAt: string;
 }
+
+export type ReminderFrequency =
+  | 'daily'
+  | 'weekly'
+  | 'biweekly'
+  | 'monthly'
+  | 'quarterly'
+  | 'annually'
+  | 'custom';
+
+export interface Reminder {
+  id: string;
+  questionId?: string;
+  departmentId?: string;
+  title: string;
+  description?: string;
+  frequency: ReminderFrequency;
+  customDays?: number;
+  lastCompletedAt?: string;
+  lastCompletedBy?: string;
+  lastCompletedByName?: string;
+  nextDueAt: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  active: boolean;
+}
+
+export interface ReminderCompletion {
+  id: string;
+  reminderId: string;
+  completedAt: string;
+  completedBy: string;
+  completedByName: string;
+  note?: string;
+}

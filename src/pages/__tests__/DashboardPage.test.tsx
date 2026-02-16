@@ -65,6 +65,7 @@ function setStore(overrides: Partial<Store>) {
       { id: 'dept-1', name: 'Bakery', icon: 'Building2', questions: [{ id: 'q1', departmentId: 'dept-1', riskCategory: 'Safety', text: 'Q1', criteria: '', answerType: 'yes_no' as const, pointsYes: 10, pointsPartial: 0, pointsNo: 0 }] },
     ],
     sessions: [],
+    reminders: [],
     ...overrides,
   });
 }

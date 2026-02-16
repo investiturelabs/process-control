@@ -138,18 +138,70 @@ All routes except `/login` require authentication.
 
 - Node.js 18+
 - npm
+- A [Clerk](https://clerk.com) account (free tier works)
+- A [Convex](https://www.convex.dev) account (free tier works)
 
-### Install & Run
+### 1. Clone & Install
 
 ```bash
-# Clone the repo
 git clone <repo-url>
 cd audit-flows
-
-# Install dependencies
 npm install
+```
 
-# Start dev server
+### 2. Set Up Clerk
+
+1. Create a Clerk application at [dashboard.clerk.com](https://dashboard.clerk.com).
+2. Copy your **Publishable Key** and **Secret Key** from the Clerk dashboard.
+
+### 3. Set Up Convex
+
+1. Run the Convex dev server for the first time — this will prompt you to log in and create a development deployment:
+
+   ```bash
+   npx convex dev
+   ```
+
+2. Convex will automatically write `CONVEX_DEPLOYMENT` and `VITE_CONVEX_URL` to your `.env.local` file.
+
+3. **Set the Clerk JWT issuer domain on your Convex deployment.** This is a server-side environment variable required for auth — it cannot be set in `.env.local` because Convex server functions don't read from local env files.
+
+   Find your Clerk issuer URL in the Clerk dashboard (typically `https://<your-subdomain>.clerk.accounts.dev`), then set it via CLI:
+
+   ```bash
+   npx convex env set CLERK_JWT_ISSUER_DOMAIN "https://<your-clerk-subdomain>.clerk.accounts.dev"
+   ```
+
+   Or set it in the [Convex dashboard](https://dashboard.convex.dev) under **Settings → Environment Variables**.
+
+### 4. Configure Local Environment Variables
+
+Copy the example env file and fill in the values:
+
+```bash
+cp .env.example .env.local
+```
+
+At minimum, set these in `.env.local`:
+
+| Variable | Source |
+|---|---|
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk dashboard → API Keys |
+| `CLERK_SECRET_KEY` | Clerk dashboard → API Keys (needed for E2E tests only) |
+| `CONVEX_DEPLOYMENT` | Auto-set by `npx convex dev` |
+| `VITE_CONVEX_URL` | Auto-set by `npx convex dev` |
+
+### 5. Run the Dev Servers
+
+You need **two terminals** — one for Convex and one for Vite:
+
+```bash
+# Terminal 1: Convex dev server (watches convex/ for changes, syncs functions)
+npx convex dev
+```
+
+```bash
+# Terminal 2: Vite dev server (frontend)
 npm run dev
 ```
 

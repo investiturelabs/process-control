@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/context';
-import { RotateCcw, Plus, Pencil, Trash2, Copy, Upload, Download, Search, X, Pin } from 'lucide-react';
+import { RotateCcw, Plus, Pencil, Trash2, Copy, Upload, Download, Search, X, Pin, Bell } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
 import type { Question, Department, SavedAnswer } from '@/types';
 import { toast } from 'sonner';
@@ -26,6 +26,7 @@ import { DeptIcon, DEPT_ICON_NAMES } from '@/components/DeptIcon';
 import { exportQuestionsCsv } from '@/lib/export';
 import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
+import { ReminderFormDialog } from '@/components/ReminderFormDialog';
 
 export function QuestionsPage() {
   const { currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment, savedAnswers, saveSavedAnswer, removeSavedAnswer, loading } =
@@ -70,6 +71,11 @@ export function QuestionsPage() {
   const [editingSA, setEditingSA] = useState<(SavedAnswer & { questionText: string }) | null>(null);
   const [deletingSA, setDeletingSA] = useState<(SavedAnswer & { questionText: string }) | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Reminder dialog state
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderQuestionId, setReminderQuestionId] = useState<string>('');
+  const [reminderDeptId, setReminderDeptId] = useState<string>('');
 
   const openAddDept = () => {
     setEditingDept(null);
@@ -450,6 +456,20 @@ export function QuestionsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="h-6 w-6 shrink-0 text-muted-foreground/0 group-hover/row:text-muted-foreground hover:!text-primary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReminderQuestionId(q.id);
+                          setReminderDeptId(dept.id);
+                          setReminderDialogOpen(true);
+                        }}
+                        title="Create reminder"
+                      >
+                        <Bell size={12} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-6 w-6 shrink-0 text-muted-foreground/0 group-hover/row:text-muted-foreground hover:!text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -742,6 +762,14 @@ export function QuestionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Reminder form dialog (from question row) */}
+      <ReminderFormDialog
+        open={reminderDialogOpen}
+        onOpenChange={setReminderDialogOpen}
+        defaultQuestionId={reminderQuestionId}
+        defaultDepartmentId={reminderDeptId}
+      />
     </div>
   );
 }

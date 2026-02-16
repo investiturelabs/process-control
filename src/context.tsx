@@ -11,7 +11,7 @@ import {
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import type { Store } from '@/store-types';
-import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer } from './types';
+import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer, Reminder, ReminderFrequency } from './types';
 import { seedDepartments } from './seed-data';
 import type { Id } from '../convex/_generated/dataModel';
 import { track, identify } from '@/lib/analytics';
@@ -86,6 +86,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sessionsData = useQuery(api.sessions.list, currentUser ? {} : 'skip');
   const invitationsData = useQuery(api.invitations.list, isAdmin ? {} : 'skip');
   const savedAnswersData = useQuery(api.savedAnswers.list, currentUser ? {} : 'skip');
+  const remindersData = useQuery(api.reminders.list, currentUser ? {} : 'skip');
 
   // --- Convex mutations (no actorId/actorName — server derives from JWT) ---
   const updateRoleMutation = useMutation(api.users.updateRole);
@@ -109,6 +110,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const saveSavedAnswerMutation = useMutation(api.savedAnswers.save);
   const updateSavedAnswerMutation = useMutation(api.savedAnswers.update);
   const removeSavedAnswerMutation = useMutation(api.savedAnswers.remove);
+  const createReminderMutation = useMutation(api.reminders.create);
+  const updateReminderMutation = useMutation(api.reminders.update);
+  const removeReminderMutation = useMutation(api.reminders.remove);
+  const completeReminderMutation = useMutation(api.reminders.complete);
 
   // --- Loading state ---
   const loading =
@@ -118,6 +123,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     sessionsData === undefined ||
     (isAdmin && invitationsData === undefined) ||
     savedAnswersData === undefined ||
+    remindersData === undefined ||
     currentUser === null;
 
   // --- Map Convex documents to app types ---
@@ -175,6 +181,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updatedAt: sa.updatedAt,
     }));
   }, [savedAnswersData]);
+
+  const reminders = useMemo<Reminder[]>(() => {
+    return (remindersData ?? []).map((r) => ({
+      id: r._id as string,
+      questionId: r.questionId,
+      departmentId: r.departmentId,
+      title: r.title,
+      description: r.description,
+      frequency: r.frequency as ReminderFrequency,
+      customDays: r.customDays,
+      lastCompletedAt: r.lastCompletedAt,
+      lastCompletedBy: r.lastCompletedBy,
+      lastCompletedByName: r.lastCompletedByName,
+      nextDueAt: r.nextDueAt,
+      createdBy: r.createdBy,
+      createdByName: r.createdByName,
+      createdAt: r.createdAt,
+      active: r.active,
+    }));
+  }, [remindersData]);
 
   // --- Sync currentUser with Convex data (role changes, deactivation, etc.) ---
   useEffect(() => {
@@ -367,6 +393,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [removeSavedAnswerMutation],
   );
 
+  const createReminder = useCallback(
+    async (data: { title: string; description?: string; frequency: ReminderFrequency; customDays?: number; questionId?: string; departmentId?: string; startDate: string }): Promise<string> => {
+      const id = await createReminderMutation(data);
+      return id as string;
+    },
+    [createReminderMutation],
+  );
+
+  const updateReminder = useCallback(
+    async (reminderId: string, data: { title?: string; description?: string; frequency?: ReminderFrequency; customDays?: number; questionId?: string; departmentId?: string; active?: boolean }) => {
+      await updateReminderMutation({ reminderId: reminderId as Id<'reminders'>, ...data });
+    },
+    [updateReminderMutation],
+  );
+
+  const removeReminder = useCallback(
+    async (reminderId: string) => {
+      await removeReminderMutation({ reminderId: reminderId as Id<'reminders'> });
+    },
+    [removeReminderMutation],
+  );
+
+  const completeReminder = useCallback(
+    async (reminderId: string, note?: string) => {
+      await completeReminderMutation({ reminderId: reminderId as Id<'reminders'>, note });
+    },
+    [completeReminderMutation],
+  );
 
   const store = useMemo<Store>(() => ({
     currentUser,
@@ -397,6 +451,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveSavedAnswer,
     updateSavedAnswer,
     removeSavedAnswer,
+    reminders,
+    createReminder,
+    updateReminder,
+    removeReminder,
+    completeReminder,
   }), [
     currentUser, users, company, departments, sessions, invitations, savedAnswers, loading,
     setCompany, updateDepartments, saveSession,
@@ -406,6 +465,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateSession, removeSession, generateTestData,
     setUserActive, duplicateDepartment,
     saveSavedAnswer, updateSavedAnswer, removeSavedAnswer,
+    reminders, createReminder, updateReminder, removeReminder, completeReminder,
   ]);
 
   // Show sync error UI

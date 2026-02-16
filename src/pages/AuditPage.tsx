@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
-import type { Answer, AnswerValue, Question, SavedAnswer } from '@/types';
+import type { Answer, AnswerValue, Question, SavedAnswer, Reminder } from '@/types';
 import { SaveAnswerDialog } from '@/components/SaveAnswerDialog';
 import { toast } from 'sonner';
 import {
@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   Pin,
   StickyNote,
+  Bell,
+  ClipboardCheck,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,11 +33,13 @@ import {
 } from '@/components/ui/dialog';
 import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
+import { ReminderFormDialog } from '@/components/ReminderFormDialog';
+import { ReminderCompleteDialog } from '@/components/ReminderCompleteDialog';
 
 export function AuditPage() {
   const { departmentId } = useParams<{ departmentId: string }>();
   const navigate = useNavigate();
-  const { departments, currentUser, sessions, saveSession, updateSession, company, savedAnswers, saveSavedAnswer, removeSavedAnswer } = useAppStore();
+  const { departments, currentUser, sessions, saveSession, updateSession, company, savedAnswers, saveSavedAnswer, removeSavedAnswer, reminders } = useAppStore();
 
   const dept = departments.find((d) => d.id === departmentId);
 
@@ -74,6 +78,17 @@ export function AuditPage() {
     return map;
   }, [savedAnswers, departmentId]);
 
+  const questionRemindersMap = useMemo(() => {
+    const map = new Map<string, Reminder[]>();
+    for (const r of reminders) {
+      if (!r.questionId || !r.active) continue;
+      const existing = map.get(r.questionId) ?? [];
+      existing.push(r);
+      map.set(r.questionId, existing);
+    }
+    return map;
+  }, [reminders]);
+
   const getPoints = useCallback(
     (question: Question, value: AnswerValue): number => {
       if (value === 'yes') return question.pointsYes;
@@ -94,6 +109,8 @@ export function AuditPage() {
   const [skippedIndices, setSkippedIndices] = useState<number[]>([]);
   const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showReminderDialog, setShowReminderDialog] = useState(false);
+  const [signOffReminder, setSignOffReminder] = useState<Reminder | null>(null);
   const initialized = useRef(false);
 
   // Combined init: resume from session OR auto-fill from saved answers
@@ -489,7 +506,89 @@ export function AuditPage() {
             Auto-filled
           </Badge>
         )}
+        {currentQuestion && (() => {
+          const qReminders = questionRemindersMap.get(currentQuestion.id);
+          if (!qReminders?.length) return null;
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const hasOverdue = qReminders.some((r) => {
+            const due = new Date(r.nextDueAt);
+            return new Date(due.getFullYear(), due.getMonth(), due.getDate()) < today;
+          });
+          return hasOverdue ? (
+            <Badge variant="secondary" className="bg-red-100 text-red-700 gap-1">
+              <Bell size={10} />
+              Reminder overdue
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="bg-blue-100 text-blue-700 gap-1">
+              <Bell size={10} />
+              {qReminders.length} reminder{qReminders.length > 1 ? 's' : ''}
+            </Badge>
+          );
+        })()}
       </div>
+
+      {/* Linked reminders panel */}
+      {currentQuestion && (() => {
+        const qReminders = questionRemindersMap.get(currentQuestion.id);
+        if (!qReminders?.length) return null;
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return (
+          <div className="mb-4 space-y-2">
+            {qReminders.map((r) => {
+              const due = new Date(r.nextDueAt);
+              const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+              const isOverdue = dueDay < today;
+              const isDueToday = dueDay.getTime() === today.getTime();
+              const signedOffThisPeriod = !!r.lastCompletedAt && dueDay > today;
+              const needsSignOff = !signedOffThisPeriod;
+              return (
+                <div
+                  key={r.id}
+                  className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm ${
+                    isOverdue
+                      ? 'border-red-200 bg-red-50 text-red-800'
+                      : isDueToday
+                        ? 'border-amber-200 bg-amber-50 text-amber-800'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  }`}
+                >
+                  <Bell size={16} className="shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{r.title}</p>
+                    <div className="flex items-center gap-3 text-xs mt-0.5 opacity-80">
+                      <span>Due: {due.toLocaleDateString()}{isOverdue ? ' (overdue)' : isDueToday ? ' (today)' : ''}</span>
+                      {r.lastCompletedAt ? (
+                        <span>Last completed: {new Date(r.lastCompletedAt).toLocaleDateString()} by {r.lastCompletedByName}</span>
+                      ) : (
+                        <span>Never completed</span>
+                      )}
+                    </div>
+                  </div>
+                  {needsSignOff ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1.5 text-xs"
+                      onClick={() => setSignOffReminder(r)}
+                    >
+                      <ClipboardCheck size={14} />
+                      Sign off
+                    </Button>
+                  ) : (
+                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 gap-1 shrink-0">
+                      <CheckCircle2 size={12} />
+                      Completed
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Expired saved answer warning */}
       {currentQuestion && (() => {
@@ -636,7 +735,7 @@ export function AuditPage() {
             </p>
             {/* Pin button — only visible when answered */}
             {currentAnswer && (
-              <div className="mt-3 flex justify-center">
+              <div className="mt-3 flex justify-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -645,6 +744,15 @@ export function AuditPage() {
                 >
                   <Pin size={14} />
                   {savedAnswerMap.has(currentQuestion.id) ? 'Saved — tap to edit' : 'Save this answer'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                  onClick={() => setShowReminderDialog(true)}
+                >
+                  <Bell size={14} />
+                  Create reminder
                 </Button>
               </div>
             )}
@@ -761,6 +869,25 @@ export function AuditPage() {
           existingSavedAnswer={savedAnswerMap.get(currentQuestion.id) ?? null}
           onSave={saveSavedAnswer}
           onRemove={removeSavedAnswer}
+        />
+      )}
+
+      {/* Create reminder dialog (inline from audit) */}
+      {currentQuestion && (
+        <ReminderFormDialog
+          open={showReminderDialog}
+          onOpenChange={setShowReminderDialog}
+          defaultQuestionId={currentQuestion.id}
+          defaultDepartmentId={departmentId}
+        />
+      )}
+
+      {/* Sign-off reminder dialog */}
+      {signOffReminder && (
+        <ReminderCompleteDialog
+          open={!!signOffReminder}
+          onOpenChange={(open) => { if (!open) setSignOffReminder(null); }}
+          reminder={signOffReminder}
         />
       )}
     </div>

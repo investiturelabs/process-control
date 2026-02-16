@@ -8,6 +8,7 @@ import {
   Users,
   ClipboardCheck,
   ListChecks,
+  Bell,
   Menu,
   X,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/history', icon: History, label: 'History' },
   { to: '/team', icon: Users, label: 'Team', adminOnly: true },
   { to: '/questions', icon: ListChecks, label: 'Questions', adminOnly: true },
+  { to: '/reminders', icon: Bell, label: 'Reminders' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

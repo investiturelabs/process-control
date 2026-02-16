@@ -39,6 +39,7 @@ function setStore(overrides: Partial<Store>) {
     departments: [],
     sessions: [],
     savedAnswers: [],
+    reminders: [],
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'user' as const, avatarColor: '#000' },
     company: { id: 'c1', name: 'Test Co' },
     saveSession: vi.fn(),

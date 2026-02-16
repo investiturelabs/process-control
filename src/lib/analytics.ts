@@ -13,7 +13,10 @@ export type AnalyticsEvent =
   | { name: 'csv_exported'; properties: { type: 'sessions' | 'single_audit' | 'questions' } }
   | { name: 'backup_exported'; properties: Record<string, never> }
   | { name: 'questions_imported'; properties: { count: number } }
-  | { name: 'page_view'; properties: { path: string } };
+  | { name: 'page_view'; properties: { path: string } }
+  | { name: 'reminder_created'; properties: { frequency: string } }
+  | { name: 'reminder_completed'; properties: { reminderId: string } }
+  | { name: 'reminder_deleted'; properties: { reminderId: string } };
 
 type AnalyticsProvider = {
   track: (event: AnalyticsEvent) => void;

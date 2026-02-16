@@ -76,8 +76,8 @@ function AuthPage() {
           </div>
         </div>
 
-        <p className="relative z-10 text-blue-300 text-xs">
-          &copy; {new Date().getFullYear()} AuditFlows
+        <p className="relative z-10 text-blue-300/70 text-xs">
+          An <span className="text-blue-200/80">Investiture Labs</span> product
         </p>
       </div>
 
@@ -95,6 +95,10 @@ function AuthPage() {
         </div>
 
         <SignIn forceRedirectUrl="/" />
+
+        <p className="mt-8 text-xs text-slate-400">
+          An <span className="text-slate-500">Investiture Labs</span> product
+        </p>
       </div>
     </div>
   );

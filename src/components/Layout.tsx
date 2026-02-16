@@ -122,6 +122,12 @@ export function Layout() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
         {loading ? <LoadingSpinner slow={loadingSlow} /> : <Outlet />}
       </main>
+
+      <footer className="border-t border-border py-4 text-center">
+        <p className="text-xs text-muted-foreground/60">
+          An <a href="https://investiturelabs.com" target="_blank" rel="noopener noreferrer" className="hover:text-muted-foreground transition-colors">Investiture Labs</a> product
+        </p>
+      </footer>
     </div>
   );
 }

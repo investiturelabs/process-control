@@ -1,5 +1,5 @@
 import { clerk, clerkSetup, setupClerkTestingToken } from '@clerk/testing/playwright';
-import { test as setup, expect } from '@playwright/test';
+import { test as setup } from '@playwright/test';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,43 +13,26 @@ setup('global setup', async () => {
 });
 
 const hasCredentials =
-  !!process.env.E2E_CLERK_USER_USERNAME && !!process.env.E2E_CLERK_USER_PASSWORD;
+  !!process.env.E2E_CLERK_USER_USERNAME && !!process.env.CLERK_SECRET_KEY;
 
 export const authFile = path.join(__dirname, '../playwright/.clerk/user.json');
 
 setup('authenticate', async ({ page }) => {
-  setup.skip(!hasCredentials, 'E2E_CLERK_USER_USERNAME/PASSWORD not set');
+  setup.skip(!hasCredentials, 'E2E_CLERK_USER_USERNAME or CLERK_SECRET_KEY not set');
 
-  await setupClerkTestingToken({ page });
   await page.goto('/');
 
-  // Use Clerk's programmatic sign-in
+  // Use the emailAddress path which creates a server-side sign-in token
+  // via the Backend SDK. This bypasses ALL client-side verification
+  // (including device verification) because the token is server-signed.
   await clerk.signIn({
     page,
-    signInParams: {
-      strategy: 'password',
-      identifier: process.env.E2E_CLERK_USER_USERNAME!,
-      password: process.env.E2E_CLERK_USER_PASSWORD!,
-    },
+    emailAddress: process.env.E2E_CLERK_USER_USERNAME!,
   });
 
-  // Navigate to trigger auth state update
+  // Navigate to verify auth state propagated
   await page.goto('/');
 
-  // Wait for authenticated content — if this times out, the sign-in
-  // didn't work (likely due to device verification in Clerk settings).
-  // To fix: disable "Require the same device and browser" in Clerk Dashboard
-  // under User & Authentication > Email, Phone, Username > Verification.
-  try {
-    await page.waitForSelector('header', { state: 'visible', timeout: 15_000 });
-    await page.context().storageState({ path: authFile });
-  } catch {
-    console.warn(
-      '\n⚠️  Clerk sign-in succeeded at API level but the app did not transition to authenticated state.\n' +
-      '   This usually means device verification is enabled in Clerk Dashboard.\n' +
-      '   Authenticated e2e tests will be skipped.\n' +
-      '   To fix: Clerk Dashboard → User & Authentication → Email, Phone, Username → disable device verification.\n'
-    );
-    setup.skip(true, 'Clerk sign-in did not produce authenticated state (device verification likely enabled)');
-  }
+  await page.waitForSelector('header', { state: 'visible', timeout: 15_000 });
+  await page.context().storageState({ path: authFile });
 });

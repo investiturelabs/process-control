@@ -55,7 +55,7 @@ test.describe('Authenticated user flows', () => {
     await waitForAppReady(page);
 
     await expect(
-      page.locator('.cl-userButtonTrigger, [data-clerk-component="UserButton"], button[aria-label*="user"], button[aria-label*="Open"]')
+      page.locator('.cl-userButtonTrigger')
     ).toBeVisible({ timeout: 15_000 });
   });
 

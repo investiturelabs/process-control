@@ -76,11 +76,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [meData, syncMutation]);
 
   // --- Convex queries ---
+  // Skip all authenticated queries until user sync completes, otherwise
+  // requireAuth throws "user not found" for brand-new users whose Convex
+  // record hasn't been created yet by getOrCreateFromClerk.
   const isAdmin = currentUser?.role === 'admin';
-  const usersData = useQuery(api.users.list);
-  const companyData = useQuery(api.companies.get);
-  const departmentsData = useQuery(api.departments.listWithQuestions);
-  const sessionsData = useQuery(api.sessions.list);
+  const usersData = useQuery(api.users.list, currentUser ? {} : 'skip');
+  const companyData = useQuery(api.companies.get, currentUser ? {} : 'skip');
+  const departmentsData = useQuery(api.departments.listWithQuestions, currentUser ? {} : 'skip');
+  const sessionsData = useQuery(api.sessions.list, currentUser ? {} : 'skip');
   const invitationsData = useQuery(api.invitations.list, isAdmin ? {} : 'skip');
 
   // --- Convex mutations (no actorId/actorName — server derives from JWT) ---

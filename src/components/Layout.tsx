@@ -1,11 +1,11 @@
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { UserButton } from '@clerk/clerk-react';
 import { useAppStore } from '@/context';
 import {
   LayoutDashboard,
   History,
   Settings,
   Users,
-  LogOut,
   ClipboardCheck,
   ListChecks,
   Menu,
@@ -15,7 +15,6 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { track } from '@/lib/analytics';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 
 const navItems = [
@@ -28,8 +27,7 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { currentUser, company, logout, loading } = useAppStore();
-  const navigate = useNavigate();
+  const { currentUser, company, loading } = useAppStore();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loadingSlow, setLoadingSlow] = useState(false);
@@ -43,12 +41,6 @@ export function Layout() {
     const timer = setTimeout(() => setLoadingSlow(true), 10_000);
     return () => clearTimeout(timer);
   }, [loading]);
-
-  const handleLogout = () => {
-    track({ name: 'user_logout', properties: {} });
-    logout();
-    navigate('/login');
-  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -96,28 +88,7 @@ export function Layout() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback
-                  style={{ backgroundColor: currentUser?.avatarColor }}
-                  className="text-white text-xs font-semibold"
-                >
-                  {currentUser?.name?.charAt(0)?.toUpperCase() || '?'}
-                </AvatarFallback>
-              </Avatar>
-              <span className="hidden sm:block text-sm text-muted-foreground">
-                {currentUser?.name}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={handleLogout}
-              aria-label="Sign out"
-            >
-              <LogOut size={16} />
-            </Button>
+            <UserButton afterSignOutUrl="/sign-in" />
           </div>
         </div>
 

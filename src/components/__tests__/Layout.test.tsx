@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 // Must be before component import
-const mockNavigate = vi.fn();
 const mockLocation = { pathname: '/' };
 vi.mock('react-router-dom', () => ({
   Outlet: () => <div data-testid="outlet" />,
   NavLink: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
-  useNavigate: () => mockNavigate,
   useLocation: () => mockLocation,
+}));
+
+vi.mock('@clerk/clerk-react', () => ({
+  UserButton: () => <div data-testid="clerk-user-button" />,
 }));
 
 vi.mock('@/lib/analytics', () => ({ track: vi.fn() }));
@@ -30,7 +31,6 @@ function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'admin', avatarColor: '#3b82f6' },
     company: { id: 'c1', name: 'Test Company' },
-    logout: vi.fn(),
     loading: false,
     ...overrides,
   });
@@ -38,7 +38,7 @@ function setStore(overrides: Partial<Store>) {
 
 describe('Layout', () => {
   beforeEach(() => {
-    mockNavigate.mockReset();
+    vi.clearAllMocks();
   });
 
   it('renders nav links for all pages', () => {
@@ -57,21 +57,10 @@ describe('Layout', () => {
     expect(screen.getByText('Test Company')).toBeInTheDocument();
   });
 
-  it('shows user name and avatar', () => {
+  it('renders Clerk UserButton', () => {
     setStore({});
     render(<Layout />);
-    expect(screen.getByText('Test User')).toBeInTheDocument();
-    expect(screen.getByText('T')).toBeInTheDocument(); // Avatar fallback
-  });
-
-  it('logout button calls logout and navigates to /login', async () => {
-    const user = userEvent.setup();
-    const logoutFn = vi.fn();
-    setStore({ logout: logoutFn });
-    render(<Layout />);
-    await user.click(screen.getByLabelText('Sign out'));
-    expect(logoutFn).toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/login');
+    expect(screen.getByTestId('clerk-user-button')).toBeInTheDocument();
   });
 
   it('shows loading spinner when loading', () => {
@@ -86,5 +75,16 @@ describe('Layout', () => {
     render(<Layout />);
     expect(screen.getByTestId('outlet')).toBeInTheDocument();
     expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument();
+  });
+
+  it('hides admin nav links for non-admin users', () => {
+    setStore({
+      currentUser: { id: 'u2', name: 'Regular', email: 'user@test.com', role: 'user', avatarColor: '#000' },
+    });
+    render(<Layout />);
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Audit')).toBeInTheDocument();
+    expect(screen.queryByText('Team')).not.toBeInTheDocument();
+    expect(screen.queryByText('Questions')).not.toBeInTheDocument();
   });
 });

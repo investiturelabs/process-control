@@ -127,8 +127,6 @@ export function AuditPage() {
           const id = await saveSession({
             companyId: company?.id ?? '',
             departmentId: dept.id,
-            auditorId: currentUser.id,
-            auditorName: currentUser.name,
             date: new Date().toISOString(),
             answers: currentAnswers,
             totalPoints: earnedPoints,
@@ -299,8 +297,6 @@ export function AuditPage() {
         const newId = await saveSession({
           companyId: company?.id ?? '',
           departmentId: dept.id,
-          auditorId: currentUser.id,
-          auditorName: currentUser.name,
           date: new Date().toISOString(),
           answers: Array.from(answers.values()),
           totalPoints: earnedPoints,

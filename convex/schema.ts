@@ -8,7 +8,10 @@ export default defineSchema({
     role: v.union(v.literal("admin"), v.literal("user")),
     avatarColor: v.string(),
     active: v.optional(v.boolean()),
-  }).index("by_email", ["email"]),
+    tokenIdentifier: v.string(),
+  })
+    .index("by_email", ["email"])
+    .index("by_token", ["tokenIdentifier"]),
 
   companies: defineTable({
     name: v.string(),

@@ -8,11 +8,9 @@ export interface Store {
   sessions: AuditSession[];
   invitations: Invitation[];
   loading: boolean;
-  login: (name: string, email: string) => Promise<void>;
-  logout: () => void;
   setCompany: (c: Company) => Promise<void>;
   updateDepartments: (deps: Department[]) => Promise<void>;
-  saveSession: (session: Omit<AuditSession, 'id'>) => Promise<string>;
+  saveSession: (session: Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>) => Promise<string>;
   inviteUser: (email: string, role: Role) => Promise<void>;
   updateUserRole: (userId: string, role: Role) => Promise<void>;
   removeInvitation: (invId: string) => Promise<void>;
@@ -22,7 +20,7 @@ export interface Store {
   addDepartment: (name: string, icon: string) => Promise<string>;
   updateDepartment: (stableId: string, name: string, icon: string) => Promise<void>;
   removeDepartment: (stableId: string) => Promise<void>;
-  updateSession: (sessionId: string, data: Partial<Omit<AuditSession, 'id'>>) => Promise<void>;
+  updateSession: (sessionId: string, data: Partial<Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>>) => Promise<void>;
   removeSession: (sessionId: string) => Promise<void>;
   generateTestData: () => Promise<void>;
   setUserActive: (userId: string, active: boolean) => Promise<void>;

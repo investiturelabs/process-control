@@ -1,5 +1,6 @@
 export interface EnvConfig {
   VITE_CONVEX_URL: string;
+  VITE_CLERK_PUBLISHABLE_KEY: string;
   VITE_BASE_PATH: string;
   VITE_SENTRY_DSN: string | undefined;
 }
@@ -21,6 +22,14 @@ export function validateEnv(): EnvConfig {
     );
   }
 
+  const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+  if (!clerkKey) {
+    throw new Error(
+      'Missing required environment variable: VITE_CLERK_PUBLISHABLE_KEY. ' +
+      'Copy .env.example to .env.local and fill in the values.'
+    );
+  }
+
   const basePath = import.meta.env.VITE_BASE_PATH || '/';
   if (!basePath.startsWith('/')) {
     throw new Error(
@@ -32,6 +41,7 @@ export function validateEnv(): EnvConfig {
 
   return {
     VITE_CONVEX_URL: convexUrl,
+    VITE_CLERK_PUBLISHABLE_KEY: clerkKey,
     VITE_BASE_PATH: basePath,
     VITE_SENTRY_DSN: sentryDsn,
   };

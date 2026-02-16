@@ -13,6 +13,8 @@ import type * as companies from "../companies.js";
 import type * as crons from "../crons.js";
 import type * as departments from "../departments.js";
 import type * as invitations from "../invitations.js";
+import type * as lib_auth from "../lib/auth.js";
+import type * as lib_validators from "../lib/validators.js";
 import type * as questions from "../questions.js";
 import type * as seed from "../seed.js";
 import type * as sessions from "../sessions.js";
@@ -31,6 +33,8 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   departments: typeof departments;
   invitations: typeof invitations;
+  "lib/auth": typeof lib_auth;
+  "lib/validators": typeof lib_validators;
   questions: typeof questions;
   seed: typeof seed;
   sessions: typeof sessions;

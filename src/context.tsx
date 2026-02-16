@@ -17,14 +17,6 @@ import type { Id } from '../convex/_generated/dataModel';
 import { track, identify } from '@/lib/analytics';
 import { setErrorTrackingUser } from '@/lib/errorTracking';
 
-const CURRENT_USER_KEY = 'pcr_currentUser';
-
-// SECURITY NOTE: currentUser is stored in localStorage for session persistence.
-// The role field is used only for UI gating. All privileged operations should be validated
-// server-side in Convex mutations. Modifying localStorage role only affects what
-// UI elements are visible, not what actions are permitted.
-// TODO: Add server-side role checks in Convex mutations for privileged operations.
-
 export const StoreContext = createContext<Store | null>(null);
 
 function mapConvexUser(doc: { _id: string; name: string; email: string; role: string; avatarColor: string; active?: boolean }): User {
@@ -32,26 +24,66 @@ function mapConvexUser(doc: { _id: string; name: string; email: string; role: st
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  // --- Local state for current user (persisted to localStorage) ---
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    try {
-      const raw = localStorage.getItem(CURRENT_USER_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
+  // --- Clerk JWT → Convex user sync ---
+  const syncMutation = useMutation(api.users.getOrCreateFromClerk);
+  const syncAttemptsRef = useRef(0);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // --- Convex user from server (me query) ---
+  const meData = useQuery(api.users.me);
+
+  // Sync Clerk user with Convex on mount (when meData first resolves)
+  const hasSynced = useRef(false);
+  useEffect(() => {
+    if (hasSynced.current) return;
+    if (meData === undefined) return; // still loading
+
+    if (meData !== null) {
+      // User already exists in Convex
+      hasSynced.current = true;
+      const user = mapConvexUser(meData);
+      setCurrentUser(user);
+      identify(user.id, { name: user.name, role: user.role });
+      setErrorTrackingUser({ id: user.id, email: user.email, name: user.name });
+      return;
     }
-  });
+
+    // meData is null — user not yet in Convex, create via mutation
+    if (syncAttemptsRef.current >= 3) {
+      setSyncError('Failed to sync your account. Please refresh and try again.');
+      return;
+    }
+
+    syncAttemptsRef.current++;
+    syncMutation()
+      .then((doc) => {
+        hasSynced.current = true;
+        const user = mapConvexUser(doc);
+        setCurrentUser(user);
+        track({ name: 'user_login', properties: { isNewUser: true } });
+        identify(user.id, { name: user.name, role: user.role });
+        setErrorTrackingUser({ id: user.id, email: user.email, name: user.name });
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('deactivated')) {
+          setSyncError('Account deactivated. Contact your administrator.');
+        } else if (syncAttemptsRef.current >= 3) {
+          setSyncError('Failed to sync your account. Please refresh and try again.');
+        }
+      });
+  }, [meData, syncMutation]);
 
   // --- Convex queries ---
+  const isAdmin = currentUser?.role === 'admin';
   const usersData = useQuery(api.users.list);
   const companyData = useQuery(api.companies.get);
   const departmentsData = useQuery(api.departments.listWithQuestions);
-  // TODO: Replace sessions.list with paginated/scoped query to reduce payload
   const sessionsData = useQuery(api.sessions.list);
-  const invitationsData = useQuery(api.invitations.list);
+  const invitationsData = useQuery(api.invitations.list, isAdmin ? {} : 'skip');
 
-  // --- Convex mutations ---
-  const loginMutation = useMutation(api.users.login);
+  // --- Convex mutations (no actorId/actorName — server derives from JWT) ---
   const updateRoleMutation = useMutation(api.users.updateRole);
   const setCompanyMutation = useMutation(api.companies.set);
   const resetToDefaultsMutation = useMutation(api.departments.resetToDefaults);
@@ -71,15 +103,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setActiveMutation = useMutation(api.users.setActive);
   const duplicateDepartmentMutation = useMutation(api.departments.duplicate);
 
-  // --- Loading state (Fix #14: include companyData) ---
+  // --- Loading state ---
   const loading =
     usersData === undefined ||
     companyData === undefined ||
     departmentsData === undefined ||
     sessionsData === undefined ||
-    invitationsData === undefined;
+    (isAdmin && invitationsData === undefined) ||
+    currentUser === null;
 
-  // --- Map Convex documents to app types (Fix #1: memoize all mapped arrays) ---
+  // --- Map Convex documents to app types ---
   const users = useMemo<User[]>(() => {
     return (usersData ?? []).map(mapConvexUser);
   }, [usersData]);
@@ -89,7 +122,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { id: companyData._id as string, name: companyData.name, logoUrl: companyData.logoUrl };
   }, [companyData]);
 
-  // Fix #3: Map departments explicitly instead of unsafe cast
   const departments = useMemo<Department[]>(() => {
     return (departmentsData ?? []) as Department[];
   }, [departmentsData]);
@@ -122,15 +154,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [invitationsData]);
 
   // --- Sync currentUser with Convex data (role changes, deactivation, etc.) ---
-  // Fix #4: Compare ALL fields. Fix #5: Use only stable ID for lookup
   useEffect(() => {
     if (!currentUser || !usersData) return;
     const fresh = usersData.find((u) => u._id === currentUser.id);
     if (!fresh) return;
-    // Force-logout deactivated users
     if (fresh.active === false) {
-      setCurrentUser(null);
-      localStorage.removeItem(CURRENT_USER_KEY);
+      setSyncError('Account deactivated. Contact your administrator.');
       return;
     }
     const mapped = mapConvexUser(fresh);
@@ -141,12 +170,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mapped.avatarColor !== currentUser.avatarColor
     ) {
       setCurrentUser(mapped);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(mapped));
     }
   }, [usersData, currentUser]);
 
   // --- Auto-seed: if departments query returns empty, seed from seed-data ---
-  // Fix #6: Reset seeded ref on failure to allow retry
   const seeded = useRef(false);
   useEffect(() => {
     if (departmentsData !== undefined && departmentsData.length === 0 && !seeded.current) {
@@ -157,57 +184,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [departmentsData, seedAllMutation]);
 
-  // --- Actions ---
-  const login = useCallback(
-    async (name: string, email: string) => {
-      const existedBefore = usersData?.some((u) => u.email === email.toLowerCase()) ?? false;
-      const hadInvitation = invitationsData?.some(
-        (i) => i.email === email.toLowerCase().trim() && i.status === 'pending'
-      );
-      const doc = await loginMutation({ name, email });
-      const user = mapConvexUser(doc);
-      setCurrentUser(user);
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      track({
-        name: 'user_login',
-        properties: {
-          isNewUser: !existedBefore,
-          ...(hadInvitation && { invitedRole: user.role }),
-        },
-      });
-      identify(user.id, { name: user.name, role: user.role });
-      setErrorTrackingUser({ id: user.id, email: user.email, name: user.name });
-    },
-    [loginMutation, usersData, invitationsData],
-  );
-
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    localStorage.removeItem(CURRENT_USER_KEY);
-    setErrorTrackingUser(null);
-  }, []);
-
+  // --- Actions (no actorId/actorName — server derives from JWT) ---
   const setCompany = useCallback(
     async (_c: Company) => {
-      await setCompanyMutation({ name: _c.name, logoUrl: _c.logoUrl, actorId: currentUser?.id, actorName: currentUser?.name });
+      await setCompanyMutation({ name: _c.name, logoUrl: _c.logoUrl });
     },
-    [setCompanyMutation, currentUser],
+    [setCompanyMutation],
   );
 
   const updateDepartments = useCallback(
     async (deps: Department[]) => {
-      await resetToDefaultsMutation({ departments: deps, actorId: currentUser?.id, actorName: currentUser?.name });
+      await resetToDefaultsMutation({ departments: deps });
     },
-    [resetToDefaultsMutation, currentUser],
+    [resetToDefaultsMutation],
   );
 
   const saveSession = useCallback(
-    async (session: Omit<AuditSession, 'id'>): Promise<string> => {
+    async (session: Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>): Promise<string> => {
       const id = await saveSessionMutation({
         companyId: session.companyId,
         departmentId: session.departmentId,
-        auditorId: session.auditorId,
-        auditorName: session.auditorName,
         date: session.date,
         answers: session.answers,
         totalPoints: session.totalPoints,
@@ -222,30 +218,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const inviteUser = useCallback(
     async (email: string, role: Role) => {
-      await createInvitationMutation({ email, role, actorId: currentUser?.id, actorName: currentUser?.name });
+      await createInvitationMutation({ email, role });
     },
-    [createInvitationMutation, currentUser],
+    [createInvitationMutation],
   );
 
   const updateUserRole = useCallback(
     async (userId: string, role: Role) => {
-      await updateRoleMutation({ userId: userId as Id<'users'>, role, actorId: currentUser?.id, actorName: currentUser?.name });
+      await updateRoleMutation({ userId: userId as Id<'users'>, role });
     },
-    [updateRoleMutation, currentUser],
+    [updateRoleMutation],
   );
 
   const removeInvitation = useCallback(
     async (invId: string) => {
-      await removeInvitationMutation({ invitationId: invId as Id<'invitations'>, actorId: currentUser?.id, actorName: currentUser?.name });
+      await removeInvitationMutation({ invitationId: invId as Id<'invitations'> });
     },
-    [removeInvitationMutation, currentUser],
+    [removeInvitationMutation],
   );
 
   const addQuestion = useCallback(
     async (question: Omit<Question, 'id'>) => {
-      await addQuestionMutation({ ...question, actorId: currentUser?.id, actorName: currentUser?.name });
+      await addQuestionMutation({ ...question });
     },
-    [addQuestionMutation, currentUser],
+    [addQuestionMutation],
   );
 
   const updateQuestion = useCallback(
@@ -259,43 +255,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pointsYes: question.pointsYes,
         pointsPartial: question.pointsPartial,
         pointsNo: question.pointsNo,
-        actorId: currentUser?.id,
-        actorName: currentUser?.name,
       });
     },
-    [updateQuestionMutation, currentUser],
+    [updateQuestionMutation],
   );
 
   const removeQuestion = useCallback(
     async (questionId: string) => {
-      await removeQuestionMutation({ questionId: questionId as Id<'questions'>, actorId: currentUser?.id, actorName: currentUser?.name });
+      await removeQuestionMutation({ questionId: questionId as Id<'questions'> });
     },
-    [removeQuestionMutation, currentUser],
+    [removeQuestionMutation],
   );
 
   const addDepartment = useCallback(
     async (name: string, icon: string): Promise<string> => {
-      return await addDepartmentMutation({ name, icon, actorId: currentUser?.id, actorName: currentUser?.name });
+      return await addDepartmentMutation({ name, icon });
     },
-    [addDepartmentMutation, currentUser],
+    [addDepartmentMutation],
   );
 
   const updateDepartment = useCallback(
     async (stableId: string, name: string, icon: string) => {
-      await updateDepartmentMutation({ stableId, name, icon, actorId: currentUser?.id, actorName: currentUser?.name });
+      await updateDepartmentMutation({ stableId, name, icon });
     },
-    [updateDepartmentMutation, currentUser],
+    [updateDepartmentMutation],
   );
 
   const removeDepartment = useCallback(
     async (stableId: string) => {
-      await removeDepartmentMutation({ stableId, actorId: currentUser?.id, actorName: currentUser?.name });
+      await removeDepartmentMutation({ stableId });
     },
-    [removeDepartmentMutation, currentUser],
+    [removeDepartmentMutation],
   );
 
   const updateSession = useCallback(
-    async (sessionId: string, data: Partial<Omit<AuditSession, 'id'>>) => {
+    async (sessionId: string, data: Partial<Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>>) => {
       await updateSessionMutation({
         sessionId: sessionId as Id<'auditSessions'>,
         ...data,
@@ -306,9 +300,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const removeSession = useCallback(
     async (sessionId: string) => {
-      await removeSessionMutation({ sessionId: sessionId as Id<'auditSessions'>, actorId: currentUser?.id, actorName: currentUser?.name });
+      await removeSessionMutation({ sessionId: sessionId as Id<'auditSessions'> });
     },
-    [removeSessionMutation, currentUser],
+    [removeSessionMutation],
   );
 
   const generateTestData = useCallback(async () => {
@@ -317,19 +311,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setUserActive = useCallback(
     async (userId: string, active: boolean) => {
-      await setActiveMutation({ userId: userId as Id<'users'>, active, actorId: currentUser?.id, actorName: currentUser?.name });
+      await setActiveMutation({ userId: userId as Id<'users'>, active });
     },
-    [setActiveMutation, currentUser],
+    [setActiveMutation],
   );
 
   const duplicateDepartment = useCallback(
     async (stableId: string): Promise<string> => {
-      return await duplicateDepartmentMutation({ stableId, actorId: currentUser?.id, actorName: currentUser?.name });
+      return await duplicateDepartmentMutation({ stableId });
     },
-    [duplicateDepartmentMutation, currentUser],
+    [duplicateDepartmentMutation],
   );
 
-  // Fix #2: Memoize the store object
   const store = useMemo<Store>(() => ({
     currentUser,
     users,
@@ -338,8 +331,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     sessions,
     invitations,
     loading,
-    login,
-    logout,
     setCompany,
     updateDepartments,
     saveSession,
@@ -359,13 +350,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     duplicateDepartment,
   }), [
     currentUser, users, company, departments, sessions, invitations, loading,
-    login, logout, setCompany, updateDepartments, saveSession,
+    setCompany, updateDepartments, saveSession,
     inviteUser, updateUserRole, removeInvitation,
     addQuestion, updateQuestion, removeQuestion,
     addDepartment, updateDepartment, removeDepartment,
     updateSession, removeSession, generateTestData,
     setUserActive, duplicateDepartment,
   ]);
+
+  // Show sync error UI
+  if (syncError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-sm text-center">
+          <h1 className="text-xl font-bold text-red-600 mb-2">Account Error</h1>
+          <p className="text-muted-foreground text-sm mb-4">{syncError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }

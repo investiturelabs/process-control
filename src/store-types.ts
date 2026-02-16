@@ -10,7 +10,7 @@ export interface Store {
   loading: boolean;
   setCompany: (c: Company) => Promise<void>;
   updateDepartments: (deps: Department[]) => Promise<void>;
-  saveSession: (session: Omit<AuditSession, 'id'>) => Promise<string>;
+  saveSession: (session: Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>) => Promise<string>;
   inviteUser: (email: string, role: Role) => Promise<void>;
   updateUserRole: (userId: string, role: Role) => Promise<void>;
   removeInvitation: (invId: string) => Promise<void>;

@@ -2,6 +2,7 @@ import { query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 interface LogEntry {
   actorId?: string;
@@ -32,6 +33,7 @@ export const list = query({
     entityType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     if (args.entityType) {
       return await ctx.db
         .query("changeLog")

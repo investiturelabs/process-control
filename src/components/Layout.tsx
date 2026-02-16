@@ -8,7 +8,6 @@ import {
   Users,
   ClipboardCheck,
   ListChecks,
-  Pin,
   Menu,
   X,
 } from 'lucide-react';
@@ -17,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { track } from '@/lib/analytics';
 import { Separator } from '@/components/ui/separator';
+import logoImg from '@/assets/auditflowslogo.png';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -24,7 +24,6 @@ const navItems = [
   { to: '/history', icon: History, label: 'History' },
   { to: '/team', icon: Users, label: 'Team', adminOnly: true },
   { to: '/questions', icon: ListChecks, label: 'Questions', adminOnly: true },
-  { to: '/saved-answers', icon: Pin, label: 'Saved Answers', adminOnly: true },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -60,9 +59,7 @@ export function Layout() {
               {mobileOpen ? <X size={20} /> : <Menu size={20} />}
             </Button>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <ClipboardCheck size={18} className="text-primary-foreground" />
-              </div>
+              <img src={logoImg} alt="AuditFlows" className="w-8 h-8 rounded-lg" />
               <span className="font-semibold text-sm">
                 {company?.name || 'AuditFlows'}
               </span>

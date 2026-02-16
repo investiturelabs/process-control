@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/context';
-import { RotateCcw, Plus, Pencil, Trash2, Copy, Upload, Download, Search, X } from 'lucide-react';
+import { RotateCcw, Plus, Pencil, Trash2, Copy, Upload, Download, Search, X, Pin } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
-import type { Question, Department } from '@/types';
+import type { Question, Department, SavedAnswer } from '@/types';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,13 +20,15 @@ import {
 } from '@/components/ui/dialog';
 import { QuestionFormDialog } from '@/components/QuestionFormDialog';
 import { QuestionImportDialog } from '@/components/QuestionImportDialog';
+import { SaveAnswerDialog } from '@/components/SaveAnswerDialog';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { DeptIcon, DEPT_ICON_NAMES } from '@/components/DeptIcon';
 import { exportQuestionsCsv } from '@/lib/export';
 import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
 
 export function QuestionsPage() {
-  const { currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment } =
+  const { currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment, savedAnswers, saveSavedAnswer, removeSavedAnswer, loading } =
     useAppStore();
   const isAdmin = currentUser?.role === 'admin';
 
@@ -62,6 +64,12 @@ export function QuestionsPage() {
 
   // Question search state
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Saved answers state
+  const [savedAnswerSearch, setSavedAnswerSearch] = useState('');
+  const [editingSA, setEditingSA] = useState<(SavedAnswer & { questionText: string }) | null>(null);
+  const [deletingSA, setDeletingSA] = useState<(SavedAnswer & { questionText: string }) | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const openAddDept = () => {
     setEditingDept(null);
@@ -208,6 +216,74 @@ export function QuestionsPage() {
     return filteredDepartments.reduce((acc, d) => acc + d.questions.length, 0);
   }, [filteredDepartments, searchQuery]);
 
+  // Saved answers memos
+  const deptSavedAnswers = useMemo(() => {
+    const questionMap = new Map<string, Question>();
+    for (const dept of departments) {
+      for (const q of dept.questions) questionMap.set(q.id, q);
+    }
+    const grouped = new Map<string, Array<SavedAnswer & { questionText: string }>>();
+    for (const sa of savedAnswers) {
+      const q = questionMap.get(sa.questionId);
+      if (!q) continue;
+      const list = grouped.get(sa.departmentId) || [];
+      list.push({ ...sa, questionText: q.text });
+      grouped.set(sa.departmentId, list);
+    }
+    return grouped;
+  }, [departments, savedAnswers]);
+
+  const deptMap = useMemo(() => {
+    const map = new Map<string, { name: string; icon: string }>();
+    for (const d of departments) map.set(d.id, { name: d.name, icon: d.icon });
+    return map;
+  }, [departments]);
+
+  const filteredSavedDepts = useMemo(() => {
+    const term = savedAnswerSearch.toLowerCase().trim();
+    const result: Array<{ deptId: string; items: Array<SavedAnswer & { questionText: string }> }> = [];
+    for (const [deptId, items] of deptSavedAnswers) {
+      const deptInfo = deptMap.get(deptId);
+      const filtered = term
+        ? items.filter(
+            (sa) =>
+              sa.questionText.toLowerCase().includes(term) ||
+              sa.note?.toLowerCase().includes(term) ||
+              deptInfo?.name.toLowerCase().includes(term)
+          )
+        : items;
+      if (filtered.length > 0) {
+        result.push({ deptId, items: filtered });
+      }
+    }
+    return result;
+  }, [deptSavedAnswers, deptMap, savedAnswerSearch]);
+
+  const handleDeleteSA = async () => {
+    if (!deletingSA) return;
+    setIsDeleting(true);
+    try {
+      await removeSavedAnswer(deletingSA.id);
+      toast.success('Saved answer removed');
+      setDeletingSA(null);
+    } catch {
+      toast.error('Failed to remove saved answer');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const valueBadgeClass = (value: string) => {
+    if (value === 'yes') return 'bg-emerald-100 text-emerald-700';
+    if (value === 'partial') return 'bg-amber-100 text-amber-700';
+    return 'bg-red-100 text-red-700';
+  };
+
+  const isExpired = (expiresAt?: string) => {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) <= new Date();
+  };
+
   if (!isAdmin) {
     return (
       <div className="max-w-2xl mx-auto">
@@ -218,6 +294,8 @@ export function QuestionsPage() {
       </div>
     );
   }
+
+  if (loading) return <LoadingSpinner />;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -411,6 +489,140 @@ export function QuestionsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Saved answers section */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Pin size={14} className="text-muted-foreground" />
+            Saved answers
+          </CardTitle>
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search saved answers..."
+              value={savedAnswerSearch}
+              onChange={(e) => setSavedAnswerSearch(e.target.value)}
+              className="pl-8 w-[200px]"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredSavedDepts.length === 0 ? (
+            <div className="text-center py-8">
+              <Pin size={24} className="mx-auto text-muted-foreground/30 mb-2" />
+              <p className="text-muted-foreground text-sm">
+                {savedAnswerSearch
+                  ? 'No saved answers match your search.'
+                  : 'No saved answers yet. Pin answers during audits to auto-fill them in the future.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredSavedDepts.map(({ deptId, items }) => {
+                const deptInfo = deptMap.get(deptId);
+                return (
+                  <div key={deptId} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      {deptInfo && <DeptIcon name={deptInfo.icon} size={14} className="text-muted-foreground" />}
+                      <h3 className="text-sm font-semibold">{deptInfo?.name ?? deptId}</h3>
+                      <Badge variant="secondary" className="text-xs">{items.length}</Badge>
+                    </div>
+                    <div className="divide-y divide-border rounded-lg border">
+                      {items.map((sa) => (
+                        <div key={sa.id} className="px-4 py-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{sa.questionText}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <Badge variant="secondary" className={`text-xs ${valueBadgeClass(sa.value)}`}>
+                                {sa.value.charAt(0).toUpperCase() + sa.value.slice(1)}
+                              </Badge>
+                              {sa.expiresAt ? (
+                                isExpired(sa.expiresAt) ? (
+                                  <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700">
+                                    Expired {new Date(sa.expiresAt).toLocaleDateString()}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    Expires {new Date(sa.expiresAt).toLocaleDateString()}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No expiration</span>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                by {sa.savedByName}
+                              </span>
+                            </div>
+                            {sa.note && (
+                              <p className="text-xs text-muted-foreground mt-1 truncate">{sa.note}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => setEditingSA(sa)}
+                              aria-label="Edit saved answer"
+                            >
+                              <Pencil size={14} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => setDeletingSA(sa)}
+                              aria-label="Delete saved answer"
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Saved answer edit dialog */}
+      {editingSA && (
+        <SaveAnswerDialog
+          open={!!editingSA}
+          onOpenChange={(open) => { if (!open) setEditingSA(null); }}
+          questionId={editingSA.questionId}
+          questionText={editingSA.questionText}
+          departmentId={editingSA.departmentId}
+          currentValue={editingSA.value}
+          existingSavedAnswer={editingSA}
+          onSave={saveSavedAnswer}
+          onRemove={removeSavedAnswer}
+        />
+      )}
+
+      {/* Saved answer delete confirmation dialog */}
+      <Dialog open={!!deletingSA} onOpenChange={(open) => { if (!open) setDeletingSA(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove saved answer?</DialogTitle>
+            <DialogDescription>
+              This will stop auto-filling this answer in future audits. Existing audit sessions are not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingSA(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteSA} disabled={isDeleting}>
+              {isDeleting ? 'Removing...' : 'Remove'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Question import dialog */}
       <QuestionImportDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />

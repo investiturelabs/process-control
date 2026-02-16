@@ -4,7 +4,8 @@ import { Toaster } from 'sonner';
 import { StoreProvider } from '@/context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { config } from '@/lib/config';
-import { ClipboardCheck, Shield, BarChart3, Users } from 'lucide-react';
+import { Shield, BarChart3, Users } from 'lucide-react';
+import logoImg from '@/assets/auditflowslogo.png';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AuditPage } from '@/pages/AuditPage';
 import { AuditStartPage } from '@/pages/AuditStartPage';
@@ -14,7 +15,6 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { QuestionsPage } from '@/pages/QuestionsPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
-import { SavedAnswersPage } from '@/pages/SavedAnswersPage';
 import { Layout } from '@/components/Layout';
 
 function AuthPage() {
@@ -29,9 +29,7 @@ function AuthPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
-              <ClipboardCheck size={22} />
-            </div>
+            <img src={logoImg} alt="AuditFlows" className="w-10 h-10 rounded-xl" />
             <span className="text-xl font-bold tracking-tight">AuditFlows</span>
           </div>
         </div>
@@ -87,9 +85,7 @@ function AuthPage() {
         {/* Mobile-only branding */}
         <div className="lg:hidden mb-8 text-center">
           <div className="flex items-center justify-center gap-2.5 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
-              <ClipboardCheck size={22} className="text-white" />
-            </div>
+            <img src={logoImg} alt="AuditFlows" className="w-10 h-10 rounded-xl" />
             <span className="text-xl font-bold text-slate-800 tracking-tight">AuditFlows</span>
           </div>
           <p className="text-sm text-slate-500">Streamline your audit process</p>
@@ -119,7 +115,7 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="team" element={<TeamPage />} />
         <Route path="questions" element={<QuestionsPage />} />
-        <Route path="saved-answers" element={<SavedAnswersPage />} />
+        <Route path="saved-answers" element={<Navigate to="/questions" replace />} />
         <Route path="activity" element={<ActivityLogPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

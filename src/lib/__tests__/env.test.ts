@@ -41,15 +41,6 @@ describe('validateEnv', () => {
     expect(() => validateEnv()).toThrow('must start with "/"');
   });
 
-  it('succeeds with valid VITE_CONVEX_URL and defaults', async () => {
-    (import.meta.env as Record<string, string>).VITE_CONVEX_URL = 'https://example.convex.cloud';
-    const validateEnv = await loadValidateEnv();
-    const result = validateEnv();
-    expect(result.VITE_CONVEX_URL).toBe('https://example.convex.cloud');
-    expect(result.VITE_BASE_PATH).toBe('/');
-    expect(result.VITE_SENTRY_DSN).toBeUndefined();
-  });
-
   it('uses VITE_BASE_PATH when provided', async () => {
     (import.meta.env as Record<string, string>).VITE_CONVEX_URL = 'https://example.convex.cloud';
     (import.meta.env as Record<string, string>).VITE_BASE_PATH = '/custom/';

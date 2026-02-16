@@ -77,12 +77,6 @@ describe('Layout', () => {
     expect(screen.queryByTestId('loading-spinner')).not.toBeInTheDocument();
   });
 
-  it('shows Saved Answers nav link for admin', () => {
-    setStore({});
-    render(<Layout />);
-    expect(screen.getByText('Saved Answers')).toBeInTheDocument();
-  });
-
   it('hides admin nav links for non-admin users', () => {
     setStore({
       currentUser: { id: 'u2', name: 'Regular', email: 'user@test.com', role: 'user', avatarColor: '#000' },
@@ -92,6 +86,5 @@ describe('Layout', () => {
     expect(screen.getByText('Audit')).toBeInTheDocument();
     expect(screen.queryByText('Team')).not.toBeInTheDocument();
     expect(screen.queryByText('Questions')).not.toBeInTheDocument();
-    expect(screen.queryByText('Saved Answers')).not.toBeInTheDocument();
   });
 });

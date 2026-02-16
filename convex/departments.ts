@@ -1,5 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { requireAuth, requireAdmin } from "./lib/auth";
+import { sanitize, validatePoints, MAX_LENGTHS } from "./lib/validators";
 import { logChange } from "./changeLog";
 
 const departmentsValidator = v.array(
@@ -29,6 +31,8 @@ const departmentsValidator = v.array(
 export const listWithQuestions = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
+
     const departments = await ctx.db.query("departments").collect();
     const questions = await ctx.db.query("questions").collect();
 
@@ -60,28 +64,31 @@ export const add = mutation({
   args: {
     name: v.string(),
     icon: v.string(),
-    actorId: v.optional(v.string()),
-    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { name, icon, actorId, actorName }) => {
+  handler: async (ctx, { name, icon }) => {
+    const admin = await requireAdmin(ctx);
+
+    const cleanName = sanitize(name, "department name", MAX_LENGTHS.name);
+    const cleanIcon = sanitize(icon, "icon", MAX_LENGTHS.icon);
+
     const existing = await ctx.db.query("departments").collect();
     const maxOrder = existing.reduce((max, d) => Math.max(max, d.sortOrder), -1);
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const stableId = `dept-${slug}-${Date.now()}`;
     await ctx.db.insert("departments", {
       stableId,
-      name,
-      icon,
+      name: cleanName,
+      icon: cleanIcon,
       sortOrder: maxOrder + 1,
     });
 
     await logChange(ctx, {
-      actorId,
-      actorName,
+      actorId: admin._id,
+      actorName: admin.name,
       action: "department.add",
       entityType: "department",
       entityId: stableId,
-      entityLabel: name,
+      entityLabel: cleanName,
     });
 
     return stableId;
@@ -93,10 +100,13 @@ export const update = mutation({
     stableId: v.string(),
     name: v.string(),
     icon: v.string(),
-    actorId: v.optional(v.string()),
-    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { stableId, name, icon, actorId, actorName }) => {
+  handler: async (ctx, { stableId, name, icon }) => {
+    const admin = await requireAdmin(ctx);
+
+    const cleanName = sanitize(name, "department name", MAX_LENGTHS.name);
+    const cleanIcon = sanitize(icon, "icon", MAX_LENGTHS.icon);
+
     const dept = await ctx.db
       .query("departments")
       .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
@@ -105,19 +115,19 @@ export const update = mutation({
 
     const oldName = dept.name;
     const oldIcon = dept.icon;
-    await ctx.db.patch(dept._id, { name, icon });
+    await ctx.db.patch(dept._id, { name: cleanName, icon: cleanIcon });
 
     const changes: Record<string, { from: string; to: string }> = {};
-    if (oldName !== name) changes.name = { from: oldName, to: name };
-    if (oldIcon !== icon) changes.icon = { from: oldIcon, to: icon };
+    if (oldName !== cleanName) changes.name = { from: oldName, to: cleanName };
+    if (oldIcon !== cleanIcon) changes.icon = { from: oldIcon, to: cleanIcon };
 
     await logChange(ctx, {
-      actorId,
-      actorName,
+      actorId: admin._id,
+      actorName: admin.name,
       action: "department.update",
       entityType: "department",
       entityId: stableId,
-      entityLabel: name,
+      entityLabel: cleanName,
       details: JSON.stringify(changes),
     });
   },
@@ -126,10 +136,10 @@ export const update = mutation({
 export const remove = mutation({
   args: {
     stableId: v.string(),
-    actorId: v.optional(v.string()),
-    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { stableId, actorId, actorName }) => {
+  handler: async (ctx, { stableId }) => {
+    const admin = await requireAdmin(ctx);
+
     const dept = await ctx.db
       .query("departments")
       .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
@@ -158,8 +168,8 @@ export const remove = mutation({
     await ctx.db.delete(dept._id);
 
     await logChange(ctx, {
-      actorId,
-      actorName,
+      actorId: admin._id,
+      actorName: admin.name,
       action: "department.remove",
       entityType: "department",
       entityId: stableId,
@@ -172,10 +182,10 @@ export const remove = mutation({
 export const duplicate = mutation({
   args: {
     stableId: v.string(),
-    actorId: v.optional(v.string()),
-    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { stableId, actorId, actorName }) => {
+  handler: async (ctx, { stableId }) => {
+    const admin = await requireAdmin(ctx);
+
     const source = await ctx.db
       .query("departments")
       .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
@@ -216,8 +226,8 @@ export const duplicate = mutation({
     }
 
     await logChange(ctx, {
-      actorId,
-      actorName,
+      actorId: admin._id,
+      actorName: admin.name,
       action: "department.duplicate",
       entityType: "department",
       entityId: newStableId,
@@ -231,10 +241,10 @@ export const duplicate = mutation({
 export const resetToDefaults = mutation({
   args: {
     departments: departmentsValidator,
-    actorId: v.optional(v.string()),
-    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { departments, actorId, actorName }) => {
+  handler: async (ctx, { departments }) => {
+    const admin = await requireAdmin(ctx);
+
     // Delete all existing questions
     const existingQuestions = await ctx.db.query("questions").collect();
     for (const q of existingQuestions) {
@@ -247,23 +257,31 @@ export const resetToDefaults = mutation({
       await ctx.db.delete(d._id);
     }
 
-    // Re-seed
+    // Re-seed with validation
     for (let i = 0; i < departments.length; i++) {
       const dept = departments[i];
+      const cleanName = sanitize(dept.name, "department name", MAX_LENGTHS.name);
+      const cleanIcon = sanitize(dept.icon, "icon", MAX_LENGTHS.icon);
+
       await ctx.db.insert("departments", {
         stableId: dept.id,
-        name: dept.name,
-        icon: dept.icon,
+        name: cleanName,
+        icon: cleanIcon,
         sortOrder: i,
       });
 
       for (let j = 0; j < dept.questions.length; j++) {
         const q = dept.questions[j];
+        validatePoints(q.pointsYes, q.pointsPartial, q.pointsNo);
+        const cleanText = sanitize(q.text, "question text", MAX_LENGTHS.text);
+        const cleanCriteria = sanitize(q.criteria, "criteria", MAX_LENGTHS.criteria);
+        const cleanRiskCategory = sanitize(q.riskCategory, "risk category", MAX_LENGTHS.riskCategory);
+
         await ctx.db.insert("questions", {
           departmentId: dept.id,
-          riskCategory: q.riskCategory,
-          text: q.text,
-          criteria: q.criteria,
+          riskCategory: cleanRiskCategory,
+          text: cleanText,
+          criteria: cleanCriteria,
           answerType: q.answerType,
           pointsYes: q.pointsYes,
           pointsPartial: q.pointsPartial,
@@ -274,8 +292,8 @@ export const resetToDefaults = mutation({
     }
 
     await logChange(ctx, {
-      actorId,
-      actorName,
+      actorId: admin._id,
+      actorName: admin.name,
       action: "department.resetToDefaults",
       entityType: "department",
       entityLabel: `Reset ${departments.length} departments`,

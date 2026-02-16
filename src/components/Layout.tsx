@@ -1,4 +1,5 @@
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { useClerk } from '@clerk/clerk-react';
 import { useAppStore } from '@/context';
 import {
   LayoutDashboard,
@@ -28,8 +29,8 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { currentUser, company, logout, loading } = useAppStore();
-  const navigate = useNavigate();
+  const { currentUser, company, loading } = useAppStore();
+  const { signOut } = useClerk();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loadingSlow, setLoadingSlow] = useState(false);
@@ -46,8 +47,7 @@ export function Layout() {
 
   const handleLogout = () => {
     track({ name: 'user_logout', properties: {} });
-    logout();
-    navigate('/login');
+    signOut();
   };
 
   return (

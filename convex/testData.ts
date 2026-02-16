@@ -1,4 +1,5 @@
 import { mutation } from "./_generated/server";
+import { requireAdmin } from "./lib/auth";
 
 const AUDITORS = [
   { name: "Sarah Chen", email: "sarah@sprouts.com" },
@@ -24,6 +25,8 @@ function mulberry32(seed: number) {
 export const generate = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAdmin(ctx);
+
     // Check if test data already exists (more than 5 sessions = likely seeded)
     const existingSessions = await ctx.db.query("auditSessions").collect();
     if (existingSessions.length > 5) return { created: 0 };
@@ -48,6 +51,7 @@ export const generate = mutation({
           email: a.email,
           role: "user",
           avatarColor: AVATAR_COLORS[(i + 3) % AVATAR_COLORS.length],
+          tokenIdentifier: `test|${a.email}`,
         });
         auditorIds.push(id);
       }

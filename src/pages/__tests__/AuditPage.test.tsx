@@ -198,7 +198,7 @@ describe('AuditPage', () => {
     expect(screen.getByText('1 / 3')).toBeInTheDocument();
     const dots = screen.getAllByLabelText(/Go to question/);
     const firstDot = dots[0].querySelector('div');
-    expect(firstDot?.className).toContain('bg-muted');
+    expect(firstDot?.className).toContain('bg-transparent');
   });
 
   it('keyboard hint is visible', () => {

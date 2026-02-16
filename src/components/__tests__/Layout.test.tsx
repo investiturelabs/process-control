@@ -3,13 +3,16 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // Must be before component import
-const mockNavigate = vi.fn();
 const mockLocation = { pathname: '/' };
 vi.mock('react-router-dom', () => ({
   Outlet: () => <div data-testid="outlet" />,
   NavLink: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
-  useNavigate: () => mockNavigate,
   useLocation: () => mockLocation,
+}));
+
+const mockSignOut = vi.fn();
+vi.mock('@clerk/clerk-react', () => ({
+  useClerk: () => ({ signOut: mockSignOut }),
 }));
 
 vi.mock('@/lib/analytics', () => ({ track: vi.fn() }));
@@ -30,7 +33,6 @@ function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'admin', avatarColor: '#3b82f6' },
     company: { id: 'c1', name: 'Test Company' },
-    logout: vi.fn(),
     loading: false,
     ...overrides,
   });
@@ -38,7 +40,7 @@ function setStore(overrides: Partial<Store>) {
 
 describe('Layout', () => {
   beforeEach(() => {
-    mockNavigate.mockReset();
+    mockSignOut.mockReset();
   });
 
   it('renders nav links for all pages', () => {
@@ -64,14 +66,12 @@ describe('Layout', () => {
     expect(screen.getByText('T')).toBeInTheDocument(); // Avatar fallback
   });
 
-  it('logout button calls logout and navigates to /login', async () => {
+  it('logout button calls signOut', async () => {
     const user = userEvent.setup();
-    const logoutFn = vi.fn();
-    setStore({ logout: logoutFn });
+    setStore({});
     render(<Layout />);
     await user.click(screen.getByLabelText('Sign out'));
-    expect(logoutFn).toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/login');
+    expect(mockSignOut).toHaveBeenCalled();
   });
 
   it('shows loading spinner when loading', () => {

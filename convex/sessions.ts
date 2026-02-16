@@ -1,7 +1,29 @@
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
+import { requireAuth } from "./lib/auth";
 import { logChange } from "./changeLog";
+
+/** Validates session fields shared by save and update. */
+function validateSessionFields(fields: {
+  date?: string;
+  percentage?: number;
+  totalPoints?: number;
+  maxPoints?: number;
+}) {
+  if (fields.date !== undefined && fields.date.trim().length === 0) {
+    throw new Error("date cannot be empty");
+  }
+  if (fields.percentage !== undefined && (fields.percentage < 0 || fields.percentage > 100)) {
+    throw new Error("percentage must be between 0 and 100");
+  }
+  if (fields.totalPoints !== undefined && fields.totalPoints < 0) {
+    throw new Error("totalPoints must be non-negative");
+  }
+  if (fields.maxPoints !== undefined && fields.maxPoints < 0) {
+    throw new Error("maxPoints must be non-negative");
+  }
+}
 
 const answerValidator = v.object({
   questionId: v.string(),
@@ -24,7 +46,16 @@ const answerValidator = v.object({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("auditSessions").collect();
+    const user = await requireAuth(ctx);
+
+    // Admins see all sessions; regular users see only their own
+    if (user.role === "admin") {
+      return await ctx.db.query("auditSessions").collect();
+    }
+    return await ctx.db
+      .query("auditSessions")
+      .withIndex("by_auditorId", (q) => q.eq("auditorId", user._id))
+      .collect();
   },
 });
 
@@ -34,6 +65,8 @@ export const listPaginated = query({
     departmentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+
     let q;
     if (args.departmentId) {
       q = ctx.db
@@ -57,8 +90,6 @@ export const update = mutation({
     sessionId: v.id("auditSessions"),
     companyId: v.optional(v.string()),
     departmentId: v.optional(v.string()),
-    auditorId: v.optional(v.string()),
-    auditorName: v.optional(v.string()),
     date: v.optional(v.string()),
     answers: v.optional(v.array(answerValidator)),
     totalPoints: v.optional(v.number()),
@@ -66,25 +97,38 @@ export const update = mutation({
     percentage: v.optional(v.number()),
     completed: v.optional(v.boolean()),
   },
-  handler: async (ctx, { sessionId, ...rest }) => {
-    // Filter out undefined values
-    const patch: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(rest)) {
-      if (value !== undefined) patch[key] = value;
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) throw new Error("Session not found");
+
+    // Only the auditor who created it or an admin can update
+    if (session.auditorId !== user._id && user.role !== "admin") {
+      throw new Error("Forbidden: you can only update your own sessions");
     }
 
-    // PCT-20: Inject question snapshots when completing
-    if (rest.completed === true && rest.answers) {
-      const existing = await ctx.db.get(sessionId);
-      if (!existing) throw new Error("Session not found");
+    validateSessionFields(args);
 
+    // Explicit allowlist — auditorId/auditorName are never client-patchable
+    const patch: Record<string, unknown> = {};
+    if (args.companyId !== undefined) patch.companyId = args.companyId;
+    if (args.departmentId !== undefined) patch.departmentId = args.departmentId;
+    if (args.date !== undefined) patch.date = args.date;
+    if (args.answers !== undefined) patch.answers = args.answers;
+    if (args.totalPoints !== undefined) patch.totalPoints = args.totalPoints;
+    if (args.maxPoints !== undefined) patch.maxPoints = args.maxPoints;
+    if (args.percentage !== undefined) patch.percentage = args.percentage;
+    if (args.completed !== undefined) patch.completed = args.completed;
+
+    // PCT-20: Inject question snapshots when completing
+    if (args.completed === true && args.answers) {
       const questions = await ctx.db
         .query("questions")
-        .withIndex("by_departmentId", (q) => q.eq("departmentId", existing.departmentId))
+        .withIndex("by_departmentId", (q) => q.eq("departmentId", session.departmentId))
         .collect();
       const qMap = new Map(questions.map((q) => [q._id as string, q]));
 
-      patch.answers = rest.answers.map((a) => {
+      patch.answers = args.answers.map((a) => {
         const q = qMap.get(a.questionId);
         if (!q) return a;
         return {
@@ -100,35 +144,41 @@ export const update = mutation({
       });
 
       await logChange(ctx, {
-        actorId: existing.auditorId,
-        actorName: existing.auditorName,
+        actorId: user._id,
+        actorName: user.name,
         action: "session.complete",
         entityType: "session",
-        entityId: sessionId,
-        entityLabel: existing.departmentId,
+        entityId: args.sessionId,
+        entityLabel: session.departmentId,
       });
     }
 
-    await ctx.db.patch(sessionId, patch);
+    await ctx.db.patch(args.sessionId, patch);
   },
 });
 
 export const remove = mutation({
   args: {
     sessionId: v.id("auditSessions"),
-    actorId: v.optional(v.string()),
-    actorName: v.optional(v.string()),
   },
-  handler: async (ctx, { sessionId, actorId, actorName }) => {
-    const existing = await ctx.db.get(sessionId);
+  handler: async (ctx, { sessionId }) => {
+    const user = await requireAuth(ctx);
+    const session = await ctx.db.get(sessionId);
+    if (!session) throw new Error("Session not found");
+
+    // Only the auditor who created it or an admin can delete
+    if (session.auditorId !== user._id && user.role !== "admin") {
+      throw new Error("Forbidden: you can only delete your own sessions");
+    }
+
     await ctx.db.delete(sessionId);
     await logChange(ctx, {
-      actorId,
-      actorName,
+      actorId: user._id,
+      actorName: user.name,
       action: "session.remove",
       entityType: "session",
       entityId: sessionId,
-      entityLabel: existing?.departmentId,
+      entityLabel: session.departmentId,
     });
   },
 });
@@ -137,8 +187,6 @@ export const save = mutation({
   args: {
     companyId: v.string(),
     departmentId: v.string(),
-    auditorId: v.string(),
-    auditorName: v.string(),
     date: v.string(),
     answers: v.array(answerValidator),
     totalPoints: v.number(),
@@ -147,6 +195,10 @@ export const save = mutation({
     completed: v.boolean(),
   },
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+
+    validateSessionFields(args);
+
     let answers = args.answers;
 
     // PCT-20: Inject question snapshots when completing
@@ -173,12 +225,18 @@ export const save = mutation({
       });
     }
 
-    const id = await ctx.db.insert("auditSessions", { ...args, answers });
+    // Server sets auditorId/auditorName from JWT-verified user — no spoofing
+    const id = await ctx.db.insert("auditSessions", {
+      ...args,
+      answers,
+      auditorId: user._id,
+      auditorName: user.name,
+    });
 
     if (args.completed) {
       await logChange(ctx, {
-        actorId: args.auditorId,
-        actorName: args.auditorName,
+        actorId: user._id,
+        actorName: user.name,
         action: "session.complete",
         entityType: "session",
         entityId: id,

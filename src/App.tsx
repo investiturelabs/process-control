@@ -18,7 +18,7 @@ import { RemindersPage } from '@/pages/RemindersPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { Layout } from '@/components/Layout';
 
-function AuthPage() {
+function AuthPage({ mode = 'sign-in' }: { mode?: 'sign-in' | 'sign-up' }) {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Left branding panel */}
@@ -81,7 +81,7 @@ function AuthPage() {
         </p>
       </div>
 
-      {/* Right sign-in panel */}
+      {/* Right auth panel */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 bg-gradient-to-b from-slate-50 to-white lg:bg-gradient-to-br lg:from-slate-50/80 lg:to-white">
         {/* Mobile-only branding */}
         <div className="lg:hidden mb-8 text-center">
@@ -92,7 +92,11 @@ function AuthPage() {
           <p className="text-sm text-slate-500">Streamline your audit process</p>
         </div>
 
-        <SignIn forceRedirectUrl="/" />
+        {mode === 'sign-up' ? (
+          <SignUp signInUrl="/sign-in" forceRedirectUrl="/" />
+        ) : (
+          <SignIn signUpUrl="/sign-up" forceRedirectUrl="/" />
+        )}
 
         <p className="mt-8 text-xs text-slate-400">
           An <span className="text-slate-500">Investiture Labs</span> product
@@ -105,8 +109,6 @@ function AuthPage() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/sign-in" element={<SignIn forceRedirectUrl="/" />} />
-      <Route path="/sign-up" element={<SignUp forceRedirectUrl="/" />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<DashboardPage />} />
         <Route path="audit" element={<AuditStartPage />} />
@@ -130,7 +132,10 @@ export default function App() {
     <BrowserRouter basename={config.basePath.replace(/\/+$/, '')}>
       <ErrorBoundary>
         <SignedOut>
-          <AuthPage />
+          <Routes>
+            <Route path="/sign-up" element={<AuthPage mode="sign-up" />} />
+            <Route path="*" element={<AuthPage mode="sign-in" />} />
+          </Routes>
         </SignedOut>
         <SignedIn>
           <StoreProvider>

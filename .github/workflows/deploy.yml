@@ -23,6 +23,6 @@ jobs:
 
       - run: npm ci
 
-      - run: npx convex deploy
+      - run: npx convex deploy --yes
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

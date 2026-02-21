@@ -36,16 +36,6 @@ import { DeptIcon } from '@/components/DeptIcon';
 import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
 
-const FREQUENCY_LABELS: Record<string, string> = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annually: 'Annually',
-  custom: 'Custom',
-};
-
 function formatDueDate(nextDueAt: string): string {
   const due = new Date(nextDueAt);
   const now = new Date();

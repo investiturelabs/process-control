@@ -44,8 +44,8 @@ export function QuestionFormDialog({
   const [riskCategory, setRiskCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [answerType, setAnswerType] = useState<AnswerType>('yes_no');
-  const [pointsYes, setPointsYes] = useState(5);
-  const [pointsPartial, setPointsPartial] = useState(3);
+  const [pointsYesStr, setPointsYesStr] = useState('5');
+  const [pointsPartialStr, setPointsPartialStr] = useState('3');
 
   // Fix #15: Use ref to track initialization instead of existingCategories in deps
   const initializedRef = useRef(false);
@@ -64,16 +64,16 @@ export function QuestionFormDialog({
       setRiskCategory(question.riskCategory);
       setCustomCategory('');
       setAnswerType(question.answerType);
-      setPointsYes(question.pointsYes);
-      setPointsPartial(question.pointsPartial);
+      setPointsYesStr(String(question.pointsYes));
+      setPointsPartialStr(String(question.pointsPartial));
     } else {
       setText('');
       setCriteria('');
       setRiskCategory(existingCategories[0] || '');
       setCustomCategory('');
       setAnswerType('yes_no');
-      setPointsYes(5);
-      setPointsPartial(3);
+      setPointsYesStr('5');
+      setPointsPartialStr('3');
     }
   }, [open, question, existingCategories]);
 
@@ -95,8 +95,8 @@ export function QuestionFormDialog({
       text: text.trim(),
       criteria: criteria.trim(),
       answerType,
-      pointsYes,
-      pointsPartial: answerType === 'yes_no_partial' ? pointsPartial : 0,
+      pointsYes: parseInt(pointsYesStr, 10) || 0,
+      pointsPartial: answerType === 'yes_no_partial' ? (parseInt(pointsPartialStr, 10) || 0) : 0,
       pointsNo: 0,
     };
 
@@ -200,12 +200,8 @@ export function QuestionFormDialog({
                 id="q-pts-yes"
                 type="number"
                 min={0}
-                value={pointsYes}
-                onChange={(e) => {
-                  // Fix #14: Validate points input
-                  const parsed = parseInt(e.target.value, 10);
-                  setPointsYes(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
-                }}
+                value={pointsYesStr}
+                onChange={(e) => setPointsYesStr(e.target.value)}
               />
             </div>
             {answerType === 'yes_no_partial' && (
@@ -215,11 +211,8 @@ export function QuestionFormDialog({
                   id="q-pts-partial"
                   type="number"
                   min={0}
-                  value={pointsPartial}
-                  onChange={(e) => {
-                    const parsed = parseInt(e.target.value, 10);
-                    setPointsPartial(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
-                  }}
+                  value={pointsPartialStr}
+                  onChange={(e) => setPointsPartialStr(e.target.value)}
                 />
               </div>
             )}

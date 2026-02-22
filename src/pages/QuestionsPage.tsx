@@ -325,9 +325,9 @@ export function QuestionsPage() {
 
       {/* Questions management */}
       <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-sm">Audit questions</CardTitle>
-          <div className="flex items-center gap-1">
+        <CardHeader className="flex-row items-start justify-between space-y-0 gap-2 flex-wrap">
+          <CardTitle className="text-sm shrink-0">Audit questions</CardTitle>
+          <div className="flex items-center gap-1 flex-wrap">
             <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground" onClick={() => { exportQuestionsCsv(departments); track({ name: 'csv_exported', properties: { type: 'questions' } }); }}>
               <Download size={12} />
               Export CSV

@@ -1,57 +1,63 @@
 import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAdmin } from "./lib/auth";
+import type { Id } from "./_generated/dataModel";
+import { requireOrgAdmin, requireOrgMember } from "./lib/auth";
 import { sanitizeEmail } from "./lib/validators";
 import { logChange } from "./changeLog";
 
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    await requireOrgAdmin(ctx, orgId);
 
     const now = new Date().toISOString();
-    const pending = await ctx.db
+    const allInvitations = await ctx.db
       .query("invitations")
-      .withIndex("by_status", (q) => q.eq("status", "pending"))
-      .collect();
-    const accepted = await ctx.db
-      .query("invitations")
-      .withIndex("by_status", (q) => q.eq("status", "accepted"))
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
       .collect();
 
-    const validPending = pending.filter(
-      (inv) => !inv.expiresAt || inv.expiresAt > now
+    const validPending = allInvitations.filter(
+      (inv) =>
+        inv.status === "accepted" ||
+        (inv.status === "pending" && (!inv.expiresAt || inv.expiresAt > now)),
     );
-    return [...validPending, ...accepted];
+    return validPending;
   },
 });
 
 export const create = mutation({
   args: {
+    orgId: v.id("organizations"),
     email: v.string(),
     role: v.union(v.literal("admin"), v.literal("user")),
   },
-  handler: async (ctx, { email, role }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, email, role }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const cleanEmail = sanitizeEmail(email, "email");
 
-    // Check if email is already a registered user
+    // Check if email is already a member of this org
     const existingUser = await ctx.db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", cleanEmail))
       .first();
     if (existingUser) {
-      throw new Error("This email is already a team member.");
+      const membership = await ctx.db
+        .query("orgMembers")
+        .withIndex("by_orgId_userId", (q) => q.eq("orgId", orgId).eq("userId", existingUser._id))
+        .unique();
+      if (membership) {
+        throw new Error("This email is already a team member.");
+      }
     }
 
-    // Check existing invitations
+    // Check existing invitations for this org
     const now = new Date().toISOString();
     const existing = await ctx.db
       .query("invitations")
-      .withIndex("by_email", (q) => q.eq("email", cleanEmail))
+      .withIndex("by_orgId_email", (q) => q.eq("orgId", orgId).eq("email", cleanEmail))
       .collect();
 
     for (const inv of existing) {
@@ -76,6 +82,7 @@ export const create = mutation({
       status: "pending",
       createdAt: now,
       expiresAt,
+      orgId,
     });
 
     await logChange(ctx, {
@@ -86,6 +93,7 @@ export const create = mutation({
       entityId: id,
       entityLabel: cleanEmail,
       details: JSON.stringify({ role }),
+      orgId,
     });
 
     return id;
@@ -94,12 +102,14 @@ export const create = mutation({
 
 export const remove = mutation({
   args: {
+    orgId: v.id("organizations"),
     invitationId: v.id("invitations"),
   },
-  handler: async (ctx, { invitationId }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, invitationId }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const old = await ctx.db.get(invitationId);
+    if (!old || old.orgId !== orgId) throw new Error("Invitation not found");
     await ctx.db.delete(invitationId);
 
     await logChange(ctx, {
@@ -109,6 +119,7 @@ export const remove = mutation({
       entityType: "invitation",
       entityId: invitationId,
       entityLabel: old?.email,
+      orgId,
     });
   },
 });
@@ -121,19 +132,21 @@ export const deleteExpired = internalMutation({
       .query("invitations")
       .withIndex("by_status", (q) => q.eq("status", "pending"))
       .collect();
-    let count = 0;
+
+    const countByOrg = new Map<Id<"organizations">, number>();
     for (const inv of pending) {
       if (inv.expiresAt && inv.expiresAt <= now) {
         await ctx.db.delete(inv._id);
-        count++;
+        countByOrg.set(inv.orgId, (countByOrg.get(inv.orgId) ?? 0) + 1);
       }
     }
 
-    if (count > 0) {
+    for (const [orgId, count] of countByOrg) {
       await logChange(ctx, {
         action: "invitation.expiredCleanup",
         entityType: "invitation",
         details: JSON.stringify({ count }),
+        orgId,
       });
     }
   },

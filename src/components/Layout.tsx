@@ -30,7 +30,7 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { currentUser, company, loading } = useAppStore();
+  const { currentUser, company, loading, orgRole } = useAppStore();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loadingSlow, setLoadingSlow] = useState(false);
@@ -69,7 +69,7 @@ export function Layout() {
           </div>
 
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.filter(item => !item.adminOnly || currentUser?.role === 'admin').map((item) => (
+            {navItems.filter(item => !item.adminOnly || orgRole === 'admin').map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -97,7 +97,7 @@ export function Layout() {
           <>
             <Separator />
             <nav aria-label="Mobile navigation" className="md:hidden bg-card px-4 pb-3 pt-2">
-              {navItems.filter(item => !item.adminOnly || currentUser?.role === 'admin').map((item) => (
+              {navItems.filter(item => !item.adminOnly || orgRole === 'admin').map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

@@ -28,8 +28,13 @@ const validDepartments = [
 describe('seed.seedAll', () => {
   it('throws when not authenticated (C2)', async () => {
     const t = convexTest(schema, modules);
+    // Need a valid orgId
+    const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
+
     await expect(
-      t.mutation(api.seed.seedAll, { departments: validDepartments })
+      t.mutation(api.seed.seedAll, { orgId, departments: validDepartments })
     ).rejects.toThrow('Unauthorized');
   });
 
@@ -38,25 +43,33 @@ describe('seed.seedAll', () => {
 
     // Create admin first
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    // Create regular user
-    const asUser = t.withIdentity(clerkIdentity({ name: 'User', id: 'user1' }));
+    // Invite regular user to same org
+    await asAdmin.mutation(api.invitations.create, {
+      orgId,
+      email: 'user1@test.com',
+      role: 'user',
+    });
+
+    const asUser = t.withIdentity(clerkIdentity({ name: 'User', email: 'user1@test.com', id: 'user1' }));
     await asUser.mutation(api.users.getOrCreateFromClerk);
 
     await expect(
-      asUser.mutation(api.seed.seedAll, { departments: validDepartments })
-    ).rejects.toThrow('Forbidden: admin access required');
+      asUser.mutation(api.seed.seedAll, { orgId, departments: validDepartments })
+    ).rejects.toThrow('Forbidden: org admin access required');
   });
 
   it('admin can seed departments', async () => {
     const t = convexTest(schema, modules);
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    await asAdmin.mutation(api.seed.seedAll, { departments: validDepartments });
+    await asAdmin.mutation(api.seed.seedAll, { orgId, departments: validDepartments });
 
-    const depts = await asAdmin.query(api.departments.listWithQuestions);
+    const depts = await asAdmin.query(api.departments.listWithQuestions, { orgId });
     expect(depts).toHaveLength(1);
     expect(depts[0].name).toBe('Test Dept');
     expect(depts[0].questions).toHaveLength(1);
@@ -65,22 +78,25 @@ describe('seed.seedAll', () => {
   it('is idempotent (does not duplicate on second call)', async () => {
     const t = convexTest(schema, modules);
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    await asAdmin.mutation(api.seed.seedAll, { departments: validDepartments });
-    await asAdmin.mutation(api.seed.seedAll, { departments: validDepartments });
+    await asAdmin.mutation(api.seed.seedAll, { orgId, departments: validDepartments });
+    await asAdmin.mutation(api.seed.seedAll, { orgId, departments: validDepartments });
 
-    const depts = await asAdmin.query(api.departments.listWithQuestions);
+    const depts = await asAdmin.query(api.departments.listWithQuestions, { orgId });
     expect(depts).toHaveLength(1);
   });
 
   it('validates text fields (M3)', async () => {
     const t = convexTest(schema, modules);
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
     await expect(
       asAdmin.mutation(api.seed.seedAll, {
+        orgId,
         departments: [
           {
             id: 'dept-bad',
@@ -96,10 +112,12 @@ describe('seed.seedAll', () => {
   it('validates point values (M3)', async () => {
     const t = convexTest(schema, modules);
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
     await expect(
       asAdmin.mutation(api.seed.seedAll, {
+        orgId,
         departments: [
           {
             id: 'dept-bad',

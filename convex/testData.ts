@@ -1,5 +1,6 @@
 import { mutation } from "./_generated/server";
-import { requireAdmin } from "./lib/auth";
+import { v } from "convex/values";
+import { requireOrgAdmin } from "./lib/auth";
 
 const AUDITORS = [
   { name: "Sarah Chen", email: "sarah@example.com" },
@@ -23,19 +24,28 @@ function mulberry32(seed: number) {
 }
 
 export const generate = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    await requireOrgAdmin(ctx, orgId);
 
     // Check if test data already exists (more than 5 sessions = likely seeded)
-    const existingSessions = await ctx.db.query("auditSessions").collect();
+    const existingSessions = await ctx.db
+      .query("auditSessions")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
     if (existingSessions.length > 5) return { created: 0 };
 
-    const departments = await ctx.db.query("departments").collect();
-    const questions = await ctx.db.query("questions").collect();
+    const departments = await ctx.db
+      .query("departments")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId))
+      .collect();
     if (departments.length === 0) return { created: 0 };
 
-    // Ensure auditor users exist
+    // Ensure auditor users exist and are org members
     const auditorIds: string[] = [];
     for (let i = 0; i < AUDITORS.length; i++) {
       const a = AUDITORS[i];
@@ -43,17 +53,31 @@ export const generate = mutation({
         .query("users")
         .withIndex("by_email", (q) => q.eq("email", a.email))
         .first();
+      let userId: string;
       if (existing) {
-        auditorIds.push(existing._id);
+        userId = existing._id;
       } else {
-        const id = await ctx.db.insert("users", {
+        userId = await ctx.db.insert("users", {
           name: a.name,
           email: a.email,
-          role: "user",
           avatarColor: AVATAR_COLORS[(i + 3) % AVATAR_COLORS.length],
           tokenIdentifier: `test|${a.email}`,
         });
-        auditorIds.push(id);
+      }
+      auditorIds.push(userId);
+
+      // Ensure org membership
+      const membership = await ctx.db
+        .query("orgMembers")
+        .withIndex("by_orgId_userId", (q) => q.eq("orgId", orgId).eq("userId", userId as any))
+        .unique();
+      if (!membership) {
+        await ctx.db.insert("orgMembers", {
+          orgId,
+          userId: userId as any,
+          role: "user",
+          joinedAt: new Date().toISOString(),
+        });
       }
     }
 
@@ -182,6 +206,7 @@ export const generate = mutation({
             maxPoints,
             percentage,
             completed: true,
+            orgId,
           });
 
           created++;

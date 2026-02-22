@@ -40,6 +40,8 @@ const testDepts = [
 function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'user', avatarColor: '#000' },
+    orgId: 'org1',
+    orgRole: 'user',
     departments: testDepts,
     sessions: [],
     ...overrides,

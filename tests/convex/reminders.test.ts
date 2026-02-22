@@ -6,15 +6,19 @@ import { modules, clerkIdentity } from './helpers';
 
 async function setupUser(t: ReturnType<typeof convexTest>, id = 'user1') {
   const asUser = t.withIdentity(clerkIdentity({ name: 'Test User', id }));
-  await asUser.mutation(api.users.getOrCreateFromClerk);
-  return asUser;
+  const user = await asUser.mutation(api.users.getOrCreateFromClerk);
+  const orgId = user.orgId!;
+  return { asUser, orgId };
 }
 
 describe('reminders.create', () => {
   it('throws when not authenticated', async () => {
     const t = convexTest(schema, modules);
+    const { orgId } = await setupUser(t);
+
     await expect(
       t.mutation(api.reminders.create, {
+        orgId,
         title: 'Clean drains',
         frequency: 'weekly',
         startDate: new Date().toISOString(),
@@ -24,10 +28,11 @@ describe('reminders.create', () => {
 
   it('creates a reminder with correct fields', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const startDate = '2025-03-01T00:00:00.000Z';
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Clean drains',
       description: 'All floor drains in bakery',
       frequency: 'weekly',
@@ -36,7 +41,7 @@ describe('reminders.create', () => {
 
     expect(id).toBeTruthy();
 
-    const reminders = await asUser.query(api.reminders.list);
+    const reminders = await asUser.query(api.reminders.list, { orgId });
     expect(reminders).toHaveLength(1);
     expect(reminders[0].title).toBe('Clean drains');
     expect(reminders[0].description).toBe('All floor drains in bakery');
@@ -47,10 +52,11 @@ describe('reminders.create', () => {
 
   it('validates empty title', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     await expect(
       asUser.mutation(api.reminders.create, {
+        orgId,
         title: '   ',
         frequency: 'daily',
         startDate: new Date().toISOString(),
@@ -60,10 +66,11 @@ describe('reminders.create', () => {
 
   it('validates custom frequency requires customDays', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     await expect(
       asUser.mutation(api.reminders.create, {
+        orgId,
         title: 'Custom task',
         frequency: 'custom',
         startDate: new Date().toISOString(),
@@ -73,16 +80,17 @@ describe('reminders.create', () => {
 
   it('creates reminder with custom frequency', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Every 10 days',
       frequency: 'custom',
       customDays: 10,
       startDate: '2025-06-01T00:00:00.000Z',
     });
 
-    const reminders = await asUser.query(api.reminders.list);
+    const reminders = await asUser.query(api.reminders.list, { orgId });
     expect(reminders).toHaveLength(1);
     expect(reminders[0].frequency).toBe('custom');
     expect(reminders[0].customDays).toBe(10);
@@ -92,68 +100,74 @@ describe('reminders.create', () => {
 describe('reminders.update', () => {
   it('updates reminder fields', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Original',
       frequency: 'weekly',
       startDate: new Date().toISOString(),
     });
 
     await asUser.mutation(api.reminders.update, {
+      orgId,
       reminderId: id,
       title: 'Updated title',
       description: 'New desc',
     });
 
-    const reminders = await asUser.query(api.reminders.list);
+    const reminders = await asUser.query(api.reminders.list, { orgId });
     expect(reminders[0].title).toBe('Updated title');
     expect(reminders[0].description).toBe('New desc');
   });
 
   it('recomputes nextDueAt when frequency changes', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const startDate = '2025-03-01T00:00:00.000Z';
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Task',
       frequency: 'weekly',
       startDate,
     });
 
-    const before = await asUser.query(api.reminders.list);
+    const before = await asUser.query(api.reminders.list, { orgId });
     const oldNextDue = before[0].nextDueAt;
 
     await asUser.mutation(api.reminders.update, {
+      orgId,
       reminderId: id,
       frequency: 'monthly',
     });
 
-    const after = await asUser.query(api.reminders.list);
+    const after = await asUser.query(api.reminders.list, { orgId });
     expect(after[0].nextDueAt).not.toBe(oldNextDue);
   });
 
   it('can deactivate a reminder', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Task',
       frequency: 'daily',
       startDate: new Date().toISOString(),
     });
 
     await asUser.mutation(api.reminders.update, {
+      orgId,
       reminderId: id,
       active: false,
     });
 
     // list only returns active reminders
-    const active = await asUser.query(api.reminders.list);
+    const active = await asUser.query(api.reminders.list, { orgId });
     expect(active).toHaveLength(0);
 
-    const all = await asUser.query(api.reminders.listAll);
+    const all = await asUser.query(api.reminders.listAll, { orgId });
     expect(all).toHaveLength(1);
     expect(all[0].active).toBe(false);
   });
@@ -162,27 +176,30 @@ describe('reminders.update', () => {
 describe('reminders.complete', () => {
   it('records completion and advances nextDueAt', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const startDate = '2025-01-01T00:00:00.000Z';
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Weekly task',
       frequency: 'weekly',
       startDate,
     });
 
     await asUser.mutation(api.reminders.complete, {
+      orgId,
       reminderId: id,
       note: 'Done for this week',
     });
 
-    const reminders = await asUser.query(api.reminders.list);
+    const reminders = await asUser.query(api.reminders.list, { orgId });
     expect(reminders[0].lastCompletedAt).toBeTruthy();
     expect(reminders[0].lastCompletedByName).toBe('Test User');
     // nextDueAt should have advanced from the completion time
     expect(reminders[0].nextDueAt).not.toBe(startDate);
 
     const completions = await asUser.query(api.reminders.getCompletions, {
+      orgId,
       reminderId: id,
     });
     expect(completions).toHaveLength(1);
@@ -192,18 +209,20 @@ describe('reminders.complete', () => {
 
   it('records multiple completions', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Daily task',
       frequency: 'daily',
       startDate: '2025-01-01T00:00:00.000Z',
     });
 
-    await asUser.mutation(api.reminders.complete, { reminderId: id });
-    await asUser.mutation(api.reminders.complete, { reminderId: id, note: 'Second time' });
+    await asUser.mutation(api.reminders.complete, { orgId, reminderId: id });
+    await asUser.mutation(api.reminders.complete, { orgId, reminderId: id, note: 'Second time' });
 
     const completions = await asUser.query(api.reminders.getCompletions, {
+      orgId,
       reminderId: id,
     });
     expect(completions).toHaveLength(2);
@@ -213,22 +232,24 @@ describe('reminders.complete', () => {
 describe('reminders.remove', () => {
   it('deletes reminder and its completions', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     const id = await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'To delete',
       frequency: 'monthly',
       startDate: new Date().toISOString(),
     });
 
-    await asUser.mutation(api.reminders.complete, { reminderId: id });
+    await asUser.mutation(api.reminders.complete, { orgId, reminderId: id });
 
-    await asUser.mutation(api.reminders.remove, { reminderId: id });
+    await asUser.mutation(api.reminders.remove, { orgId, reminderId: id });
 
-    const reminders = await asUser.query(api.reminders.listAll);
+    const reminders = await asUser.query(api.reminders.listAll, { orgId });
     expect(reminders).toHaveLength(0);
 
     const completions = await asUser.query(api.reminders.getCompletions, {
+      orgId,
       reminderId: id,
     });
     expect(completions).toHaveLength(0);
@@ -238,9 +259,10 @@ describe('reminders.remove', () => {
 describe('reminders.listByQuestion', () => {
   it('returns reminders linked to a question', async () => {
     const t = convexTest(schema, modules);
-    const asUser = await setupUser(t);
+    const { asUser, orgId } = await setupUser(t);
 
     await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Linked',
       frequency: 'weekly',
       startDate: new Date().toISOString(),
@@ -248,12 +270,14 @@ describe('reminders.listByQuestion', () => {
     });
 
     await asUser.mutation(api.reminders.create, {
+      orgId,
       title: 'Unlinked',
       frequency: 'daily',
       startDate: new Date().toISOString(),
     });
 
     const linked = await asUser.query(api.reminders.listByQuestion, {
+      orgId,
       questionId: 'q_123',
     });
     expect(linked).toHaveLength(1);

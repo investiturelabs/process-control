@@ -9,6 +9,8 @@ export interface Store {
   invitations: Invitation[];
   savedAnswers: SavedAnswer[];
   loading: boolean;
+  orgId: string | null;
+  orgRole: Role | null;
   setCompany: (c: Company) => Promise<void>;
   updateDepartments: (deps: Department[]) => Promise<void>;
   saveSession: (session: Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>) => Promise<string>;

@@ -61,6 +61,8 @@ vi.mock('@/context', () => ({
 function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'admin', avatarColor: '#000' },
+    orgId: 'org1',
+    orgRole: 'admin',
     departments: [
       { id: 'dept-1', name: 'Bakery', icon: 'Building2', questions: [{ id: 'q1', departmentId: 'dept-1', riskCategory: 'Safety', text: 'Q1', criteria: '', answerType: 'yes_no' as const, pointsYes: 10, pointsPartial: 0, pointsNo: 0 }] },
     ],

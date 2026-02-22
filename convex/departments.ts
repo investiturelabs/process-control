@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAuth, requireAdmin } from "./lib/auth";
+import { requireOrgMember, requireOrgAdmin } from "./lib/auth";
 import { sanitize, validatePoints, MAX_LENGTHS } from "./lib/validators";
 import { logChange } from "./changeLog";
 
@@ -29,12 +29,18 @@ const departmentsValidator = v.array(
 );
 
 export const listWithQuestions = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAuth(ctx);
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    await requireOrgMember(ctx, orgId);
 
-    const departments = await ctx.db.query("departments").collect();
-    const questions = await ctx.db.query("questions").collect();
+    const departments = await ctx.db
+      .query("departments")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
+    const questions = await ctx.db
+      .query("questions")
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId))
+      .collect();
 
     departments.sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -62,16 +68,20 @@ export const listWithQuestions = query({
 
 export const add = mutation({
   args: {
+    orgId: v.id("organizations"),
     name: v.string(),
     icon: v.string(),
   },
-  handler: async (ctx, { name, icon }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, name, icon }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const cleanName = sanitize(name, "department name", MAX_LENGTHS.name);
     const cleanIcon = sanitize(icon, "icon", MAX_LENGTHS.icon);
 
-    const existing = await ctx.db.query("departments").collect();
+    const existing = await ctx.db
+      .query("departments")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
     const maxOrder = existing.reduce((max, d) => Math.max(max, d.sortOrder), -1);
     const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const stableId = `dept-${slug}-${Date.now()}`;
@@ -80,6 +90,7 @@ export const add = mutation({
       name: cleanName,
       icon: cleanIcon,
       sortOrder: maxOrder + 1,
+      orgId,
     });
 
     await logChange(ctx, {
@@ -89,6 +100,7 @@ export const add = mutation({
       entityType: "department",
       entityId: stableId,
       entityLabel: cleanName,
+      orgId,
     });
 
     return stableId;
@@ -97,19 +109,20 @@ export const add = mutation({
 
 export const update = mutation({
   args: {
+    orgId: v.id("organizations"),
     stableId: v.string(),
     name: v.string(),
     icon: v.string(),
   },
-  handler: async (ctx, { stableId, name, icon }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, stableId, name, icon }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const cleanName = sanitize(name, "department name", MAX_LENGTHS.name);
     const cleanIcon = sanitize(icon, "icon", MAX_LENGTHS.icon);
 
     const dept = await ctx.db
       .query("departments")
-      .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
+      .withIndex("by_orgId_stableId", (q) => q.eq("orgId", orgId).eq("stableId", stableId))
       .unique();
     if (!dept) throw new Error("Department not found");
 
@@ -129,27 +142,29 @@ export const update = mutation({
       entityId: stableId,
       entityLabel: cleanName,
       details: JSON.stringify(changes),
+      orgId,
     });
   },
 });
 
 export const remove = mutation({
   args: {
+    orgId: v.id("organizations"),
     stableId: v.string(),
   },
-  handler: async (ctx, { stableId }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, stableId }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const dept = await ctx.db
       .query("departments")
-      .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
+      .withIndex("by_orgId_stableId", (q) => q.eq("orgId", orgId).eq("stableId", stableId))
       .unique();
     if (!dept) throw new Error("Department not found");
 
     // Delete all questions belonging to this department
     const questions = await ctx.db
       .query("questions")
-      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId).eq("departmentId", stableId))
       .collect();
     for (const q of questions) {
       await ctx.db.delete(q._id);
@@ -158,7 +173,7 @@ export const remove = mutation({
     // Delete in-progress audit sessions (completed sessions are kept as historical records)
     const inProgressSessions = await ctx.db
       .query("auditSessions")
-      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId).eq("departmentId", stableId))
       .filter((q) => q.eq(q.field("completed"), false))
       .collect();
     for (const session of inProgressSessions) {
@@ -168,7 +183,7 @@ export const remove = mutation({
     // Cascade: delete saved answers for this department
     const savedAnswers = await ctx.db
       .query("savedAnswers")
-      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId).eq("departmentId", stableId))
       .collect();
     for (const sa of savedAnswers) {
       await ctx.db.delete(sa._id);
@@ -184,31 +199,36 @@ export const remove = mutation({
       entityId: stableId,
       entityLabel: dept.name,
       details: JSON.stringify({ deletedQuestions: questions.length }),
+      orgId,
     });
   },
 });
 
 export const duplicate = mutation({
   args: {
+    orgId: v.id("organizations"),
     stableId: v.string(),
   },
-  handler: async (ctx, { stableId }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, stableId }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const source = await ctx.db
       .query("departments")
-      .withIndex("by_stableId", (q) => q.eq("stableId", stableId))
+      .withIndex("by_orgId_stableId", (q) => q.eq("orgId", orgId).eq("stableId", stableId))
       .unique();
     if (!source) throw new Error("Department not found");
 
     const questions = await ctx.db
       .query("questions")
-      .withIndex("by_departmentId", (q) => q.eq("departmentId", stableId))
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId).eq("departmentId", stableId))
       .collect();
 
     const slug = source.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const newStableId = `dept-${slug}-${Date.now()}`;
-    const existing = await ctx.db.query("departments").collect();
+    const existing = await ctx.db
+      .query("departments")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
     const maxOrder = existing.reduce((max, d) => Math.max(max, d.sortOrder), -1);
 
     await ctx.db.insert("departments", {
@@ -216,6 +236,7 @@ export const duplicate = mutation({
       name: `${source.name} (Copy)`,
       icon: source.icon,
       sortOrder: maxOrder + 1,
+      orgId,
     });
 
     questions.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -231,6 +252,7 @@ export const duplicate = mutation({
         pointsPartial: q.pointsPartial,
         pointsNo: q.pointsNo,
         sortOrder: i,
+        orgId,
       });
     }
 
@@ -241,6 +263,7 @@ export const duplicate = mutation({
       entityType: "department",
       entityId: newStableId,
       entityLabel: source.name,
+      orgId,
     });
 
     return newStableId;
@@ -249,19 +272,26 @@ export const duplicate = mutation({
 
 export const resetToDefaults = mutation({
   args: {
+    orgId: v.id("organizations"),
     departments: departmentsValidator,
   },
-  handler: async (ctx, { departments }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, departments }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
-    // Delete all existing questions
-    const existingQuestions = await ctx.db.query("questions").collect();
+    // Delete all existing questions for this org
+    const existingQuestions = await ctx.db
+      .query("questions")
+      .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", orgId))
+      .collect();
     for (const q of existingQuestions) {
       await ctx.db.delete(q._id);
     }
 
-    // Delete all existing departments
-    const existingDepts = await ctx.db.query("departments").collect();
+    // Delete all existing departments for this org
+    const existingDepts = await ctx.db
+      .query("departments")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
     for (const d of existingDepts) {
       await ctx.db.delete(d._id);
     }
@@ -277,6 +307,7 @@ export const resetToDefaults = mutation({
         name: cleanName,
         icon: cleanIcon,
         sortOrder: i,
+        orgId,
       });
 
       for (let j = 0; j < dept.questions.length; j++) {
@@ -296,6 +327,7 @@ export const resetToDefaults = mutation({
           pointsPartial: q.pointsPartial,
           pointsNo: q.pointsNo,
           sortOrder: j,
+          orgId,
         });
       }
     }
@@ -306,6 +338,7 @@ export const resetToDefaults = mutation({
       action: "department.resetToDefaults",
       entityType: "department",
       entityLabel: `Reset ${departments.length} departments`,
+      orgId,
     });
   },
 });

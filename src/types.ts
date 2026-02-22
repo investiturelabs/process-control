@@ -13,6 +13,12 @@ export interface User {
   active?: boolean;
 }
 
+export interface Organization {
+  id: string;
+  name: string;
+  logoUrl?: string;
+}
+
 export interface Company {
   id: string;
   name: string;

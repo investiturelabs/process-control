@@ -30,6 +30,8 @@ vi.mock('@/context', () => ({
 function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
     currentUser: { id: 'u1', name: 'Test User', email: 'test@test.com', role: 'admin', avatarColor: '#3b82f6' },
+    orgId: 'org1',
+    orgRole: 'admin',
     company: { id: 'c1', name: 'Test Company' },
     loading: false,
     ...overrides,
@@ -80,6 +82,7 @@ describe('Layout', () => {
   it('hides admin nav links for non-admin users', () => {
     setStore({
       currentUser: { id: 'u2', name: 'Regular', email: 'user@test.com', role: 'user', avatarColor: '#000' },
+      orgRole: 'user',
     });
     render(<Layout />);
     expect(screen.getByText('Dashboard')).toBeInTheDocument();

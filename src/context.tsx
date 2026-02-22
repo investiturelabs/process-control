@@ -18,8 +18,8 @@ import { setErrorTrackingUser } from '@/lib/errorTracking';
 
 export const StoreContext = createContext<Store | null>(null);
 
-function mapConvexUser(doc: { _id: string; name: string; email: string; role: string; avatarColor: string; active?: boolean }): User {
-  return { id: doc._id, name: doc.name, email: doc.email, role: doc.role as Role, avatarColor: doc.avatarColor, active: doc.active };
+function mapConvexUser(doc: { _id: string; name: string; email: string; role?: string; avatarColor: string; active?: boolean }): User {
+  return { id: doc._id, name: doc.name, email: doc.email, role: (doc.role ?? 'user') as Role, avatarColor: doc.avatarColor, active: doc.active };
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -28,9 +28,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const syncAttemptsRef = useRef(0);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [orgRole, setOrgRole] = useState<Role | null>(null);
 
   // --- Convex user from server (me query) ---
   const meData = useQuery(api.users.me);
+
+  // Org memberships — always query once we have a user
+  const orgsData = useQuery(api.organizations.listForUser, currentUser ? {} : 'skip');
 
   // Sync Clerk user with Convex on mount (when meData first resolves)
   const hasSynced = useRef(false);
@@ -60,6 +65,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         hasSynced.current = true;
         const user = mapConvexUser(doc);
         setCurrentUser(user);
+        // Set orgId from signup result
+        if (doc.orgId) {
+          setOrgId(doc.orgId as string);
+        }
         track({ name: 'user_login', properties: { isNewUser: true } });
         identify(user.id, { name: user.name, role: user.role });
         setErrorTrackingUser({ id: user.id, email: user.email, name: user.name });
@@ -74,22 +83,55 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
   }, [meData, syncMutation]);
 
-  // --- Convex queries ---
-  // Skip all authenticated queries until user sync completes, otherwise
-  // requireAuth throws "user not found" for brand-new users whose Convex
-  // record hasn't been created yet by getOrCreateFromClerk.
-  const isAdmin = currentUser?.role === 'admin';
-  const usersData = useQuery(api.users.list, currentUser ? {} : 'skip');
-  const companyData = useQuery(api.companies.get, currentUser ? {} : 'skip');
-  const departmentsData = useQuery(api.departments.listWithQuestions, currentUser ? {} : 'skip');
-  const sessionsData = useQuery(api.sessions.list, currentUser ? {} : 'skip');
-  const invitationsData = useQuery(api.invitations.list, isAdmin ? {} : 'skip');
-  const savedAnswersData = useQuery(api.savedAnswers.list, currentUser ? {} : 'skip');
-  const remindersData = useQuery(api.reminders.list, currentUser ? {} : 'skip');
+  // --- Resolve orgId from memberships ---
+  useEffect(() => {
+    if (orgId || !orgsData || orgsData.length === 0) return;
 
-  // --- Convex mutations (no actorId/actorName — server derives from JWT) ---
+    // Check localStorage for last-used org
+    const lastOrgId = localStorage.getItem('lastOrgId');
+    const matchingOrg = lastOrgId ? orgsData.find((o) => o?._id === lastOrgId) : null;
+
+    if (matchingOrg) {
+      setOrgId(matchingOrg._id as string);
+      setOrgRole(matchingOrg.role as Role);
+    } else if (orgsData[0]) {
+      // Default to first org
+      setOrgId(orgsData[0]._id as string);
+      setOrgRole(orgsData[0].role as Role);
+    }
+  }, [orgsData, orgId]);
+
+  // Keep orgRole synced when orgsData changes
+  useEffect(() => {
+    if (!orgId || !orgsData) return;
+    const currentOrg = orgsData.find((o) => o?._id === orgId);
+    if (currentOrg && currentOrg.role !== orgRole) {
+      setOrgRole(currentOrg.role as Role);
+    }
+  }, [orgsData, orgId, orgRole]);
+
+  // Persist orgId to localStorage
+  useEffect(() => {
+    if (orgId) {
+      localStorage.setItem('lastOrgId', orgId);
+    }
+  }, [orgId]);
+
+  // --- Typed orgId for queries ---
+  const typedOrgId = orgId as Id<"organizations"> | null;
+
+  // --- Convex queries (org-scoped) ---
+  const usersData = useQuery(api.users.list, typedOrgId ? { orgId: typedOrgId } : 'skip');
+  const orgData = useQuery(api.organizations.get, typedOrgId ? { orgId: typedOrgId } : 'skip');
+  const departmentsData = useQuery(api.departments.listWithQuestions, typedOrgId ? { orgId: typedOrgId } : 'skip');
+  const sessionsData = useQuery(api.sessions.list, typedOrgId ? { orgId: typedOrgId } : 'skip');
+  const invitationsData = useQuery(api.invitations.list, (typedOrgId && orgRole === 'admin') ? { orgId: typedOrgId } : 'skip');
+  const savedAnswersData = useQuery(api.savedAnswers.list, typedOrgId ? { orgId: typedOrgId } : 'skip');
+  const remindersData = useQuery(api.reminders.list, typedOrgId ? { orgId: typedOrgId } : 'skip');
+
+  // --- Convex mutations ---
   const updateRoleMutation = useMutation(api.users.updateRole);
-  const setCompanyMutation = useMutation(api.companies.set);
+  const updateOrgMutation = useMutation(api.organizations.update);
   const resetToDefaultsMutation = useMutation(api.departments.resetToDefaults);
   const addQuestionMutation = useMutation(api.questions.add);
   const updateQuestionMutation = useMutation(api.questions.update);
@@ -116,23 +158,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // --- Loading state ---
   const loading =
     usersData === undefined ||
-    companyData === undefined ||
+    orgData === undefined ||
     departmentsData === undefined ||
     sessionsData === undefined ||
-    (isAdmin && invitationsData === undefined) ||
+    (orgRole === 'admin' && invitationsData === undefined) ||
     savedAnswersData === undefined ||
     remindersData === undefined ||
-    currentUser === null;
+    currentUser === null ||
+    orgId === null;
 
   // --- Map Convex documents to app types ---
   const users = useMemo<User[]>(() => {
-    return (usersData ?? []).map(mapConvexUser);
+    return (usersData ?? []).map((u) => u ? mapConvexUser(u as any) : null).filter(Boolean) as User[];
   }, [usersData]);
 
   const company = useMemo<Company | null>(() => {
-    if (companyData === undefined || companyData === null) return null;
-    return { id: companyData._id as string, name: companyData.name, logoUrl: companyData.logoUrl };
-  }, [companyData]);
+    if (!orgData) return null;
+    return { id: orgData._id as string, name: orgData.name, logoUrl: orgData.logoUrl };
+  }, [orgData]);
 
   const departments = useMemo<Department[]>(() => {
     return (departmentsData ?? []) as Department[];
@@ -203,7 +246,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // --- Sync currentUser with Convex data (role changes, deactivation, etc.) ---
   useEffect(() => {
     if (!currentUser || !usersData) return;
-    const fresh = usersData.find((u) => u._id === currentUser.id);
+    const fresh = (usersData as any[]).find((u) => u?._id === currentUser.id);
     if (!fresh) return;
     if (fresh.active === false) {
       setSyncError('Account deactivated. Contact your administrator.');
@@ -220,24 +263,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [usersData, currentUser]);
 
-  // --- Actions (no actorId/actorName — server derives from JWT) ---
+  // --- Actions (all pass orgId under the hood) ---
   const setCompany = useCallback(
     async (_c: Company) => {
-      await setCompanyMutation({ name: _c.name, logoUrl: _c.logoUrl });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await updateOrgMutation({ orgId: typedOrgId, name: _c.name, logoUrl: _c.logoUrl });
     },
-    [setCompanyMutation],
+    [updateOrgMutation, typedOrgId],
   );
 
   const updateDepartments = useCallback(
     async (deps: Department[]) => {
-      await resetToDefaultsMutation({ departments: deps });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await resetToDefaultsMutation({ orgId: typedOrgId, departments: deps });
     },
-    [resetToDefaultsMutation],
+    [resetToDefaultsMutation, typedOrgId],
   );
 
   const saveSession = useCallback(
     async (session: Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>): Promise<string> => {
+      if (!typedOrgId) throw new Error("No organization selected");
       const id = await saveSessionMutation({
+        orgId: typedOrgId,
         companyId: session.companyId,
         departmentId: session.departmentId,
         date: session.date,
@@ -249,40 +296,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return id as string;
     },
-    [saveSessionMutation],
+    [saveSessionMutation, typedOrgId],
   );
 
   const inviteUser = useCallback(
     async (email: string, role: Role) => {
-      await createInvitationMutation({ email, role });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await createInvitationMutation({ orgId: typedOrgId, email, role });
     },
-    [createInvitationMutation],
+    [createInvitationMutation, typedOrgId],
   );
 
   const updateUserRole = useCallback(
     async (userId: string, role: Role) => {
-      await updateRoleMutation({ userId: userId as Id<'users'>, role });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await updateRoleMutation({ orgId: typedOrgId, userId: userId as Id<'users'>, role });
     },
-    [updateRoleMutation],
+    [updateRoleMutation, typedOrgId],
   );
 
   const removeInvitation = useCallback(
     async (invId: string) => {
-      await removeInvitationMutation({ invitationId: invId as Id<'invitations'> });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await removeInvitationMutation({ orgId: typedOrgId, invitationId: invId as Id<'invitations'> });
     },
-    [removeInvitationMutation],
+    [removeInvitationMutation, typedOrgId],
   );
 
   const addQuestion = useCallback(
     async (question: Omit<Question, 'id'>) => {
-      await addQuestionMutation({ ...question });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await addQuestionMutation({ orgId: typedOrgId, ...question });
     },
-    [addQuestionMutation],
+    [addQuestionMutation, typedOrgId],
   );
 
   const updateQuestion = useCallback(
     async (question: Question) => {
+      if (!typedOrgId) throw new Error("No organization selected");
       await updateQuestionMutation({
+        orgId: typedOrgId,
         questionId: question.id as Id<'questions'>,
         riskCategory: question.riskCategory,
         text: question.text,
@@ -293,120 +346,137 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         pointsNo: question.pointsNo,
       });
     },
-    [updateQuestionMutation],
+    [updateQuestionMutation, typedOrgId],
   );
 
   const removeQuestion = useCallback(
     async (questionId: string) => {
-      await removeQuestionMutation({ questionId: questionId as Id<'questions'> });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await removeQuestionMutation({ orgId: typedOrgId, questionId: questionId as Id<'questions'> });
     },
-    [removeQuestionMutation],
+    [removeQuestionMutation, typedOrgId],
   );
 
   const addDepartment = useCallback(
     async (name: string, icon: string): Promise<string> => {
-      return await addDepartmentMutation({ name, icon });
+      if (!typedOrgId) throw new Error("No organization selected");
+      return await addDepartmentMutation({ orgId: typedOrgId, name, icon });
     },
-    [addDepartmentMutation],
+    [addDepartmentMutation, typedOrgId],
   );
 
   const updateDepartment = useCallback(
     async (stableId: string, name: string, icon: string) => {
-      await updateDepartmentMutation({ stableId, name, icon });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await updateDepartmentMutation({ orgId: typedOrgId, stableId, name, icon });
     },
-    [updateDepartmentMutation],
+    [updateDepartmentMutation, typedOrgId],
   );
 
   const removeDepartment = useCallback(
     async (stableId: string) => {
-      await removeDepartmentMutation({ stableId });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await removeDepartmentMutation({ orgId: typedOrgId, stableId });
     },
-    [removeDepartmentMutation],
+    [removeDepartmentMutation, typedOrgId],
   );
 
   const updateSession = useCallback(
     async (sessionId: string, data: Partial<Omit<AuditSession, 'id' | 'auditorId' | 'auditorName'>>) => {
+      if (!typedOrgId) throw new Error("No organization selected");
       await updateSessionMutation({
+        orgId: typedOrgId,
         sessionId: sessionId as Id<'auditSessions'>,
         ...data,
       });
     },
-    [updateSessionMutation],
+    [updateSessionMutation, typedOrgId],
   );
 
   const removeSession = useCallback(
     async (sessionId: string) => {
-      await removeSessionMutation({ sessionId: sessionId as Id<'auditSessions'> });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await removeSessionMutation({ orgId: typedOrgId, sessionId: sessionId as Id<'auditSessions'> });
     },
-    [removeSessionMutation],
+    [removeSessionMutation, typedOrgId],
   );
 
   const generateTestData = useCallback(async () => {
-    await generateTestDataMutation();
-  }, [generateTestDataMutation]);
+    if (!typedOrgId) throw new Error("No organization selected");
+    await generateTestDataMutation({ orgId: typedOrgId });
+  }, [generateTestDataMutation, typedOrgId]);
 
   const setUserActive = useCallback(
     async (userId: string, active: boolean) => {
-      await setActiveMutation({ userId: userId as Id<'users'>, active });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await setActiveMutation({ orgId: typedOrgId, userId: userId as Id<'users'>, active });
     },
-    [setActiveMutation],
+    [setActiveMutation, typedOrgId],
   );
 
   const duplicateDepartment = useCallback(
     async (stableId: string): Promise<string> => {
-      return await duplicateDepartmentMutation({ stableId });
+      if (!typedOrgId) throw new Error("No organization selected");
+      return await duplicateDepartmentMutation({ orgId: typedOrgId, stableId });
     },
-    [duplicateDepartmentMutation],
+    [duplicateDepartmentMutation, typedOrgId],
   );
 
   const saveSavedAnswer = useCallback(
     async (data: { questionId: string; departmentId: string; value: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => {
-      await saveSavedAnswerMutation({ ...data });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await saveSavedAnswerMutation({ orgId: typedOrgId, ...data });
     },
-    [saveSavedAnswerMutation],
+    [saveSavedAnswerMutation, typedOrgId],
   );
 
   const updateSavedAnswer = useCallback(
     async (savedAnswerId: string, data: { value?: 'yes' | 'no' | 'partial'; expiresAt?: string; note?: string }) => {
-      await updateSavedAnswerMutation({ savedAnswerId: savedAnswerId as Id<'savedAnswers'>, ...data });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await updateSavedAnswerMutation({ orgId: typedOrgId, savedAnswerId: savedAnswerId as Id<'savedAnswers'>, ...data });
     },
-    [updateSavedAnswerMutation],
+    [updateSavedAnswerMutation, typedOrgId],
   );
 
   const removeSavedAnswer = useCallback(
     async (savedAnswerId: string) => {
-      await removeSavedAnswerMutation({ savedAnswerId: savedAnswerId as Id<'savedAnswers'> });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await removeSavedAnswerMutation({ orgId: typedOrgId, savedAnswerId: savedAnswerId as Id<'savedAnswers'> });
     },
-    [removeSavedAnswerMutation],
+    [removeSavedAnswerMutation, typedOrgId],
   );
 
   const createReminder = useCallback(
     async (data: { title: string; description?: string; frequency: ReminderFrequency; customDays?: number; questionId?: string; departmentId?: string; startDate: string }): Promise<string> => {
-      const id = await createReminderMutation(data);
+      if (!typedOrgId) throw new Error("No organization selected");
+      const id = await createReminderMutation({ orgId: typedOrgId, ...data });
       return id as string;
     },
-    [createReminderMutation],
+    [createReminderMutation, typedOrgId],
   );
 
   const updateReminder = useCallback(
     async (reminderId: string, data: { title?: string; description?: string; frequency?: ReminderFrequency; customDays?: number; questionId?: string; departmentId?: string; active?: boolean }) => {
-      await updateReminderMutation({ reminderId: reminderId as Id<'reminders'>, ...data });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await updateReminderMutation({ orgId: typedOrgId, reminderId: reminderId as Id<'reminders'>, ...data });
     },
-    [updateReminderMutation],
+    [updateReminderMutation, typedOrgId],
   );
 
   const removeReminder = useCallback(
     async (reminderId: string) => {
-      await removeReminderMutation({ reminderId: reminderId as Id<'reminders'> });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await removeReminderMutation({ orgId: typedOrgId, reminderId: reminderId as Id<'reminders'> });
     },
-    [removeReminderMutation],
+    [removeReminderMutation, typedOrgId],
   );
 
   const completeReminder = useCallback(
     async (reminderId: string, note?: string) => {
-      await completeReminderMutation({ reminderId: reminderId as Id<'reminders'>, note });
+      if (!typedOrgId) throw new Error("No organization selected");
+      await completeReminderMutation({ orgId: typedOrgId, reminderId: reminderId as Id<'reminders'>, note });
     },
-    [completeReminderMutation],
+    [completeReminderMutation, typedOrgId],
   );
 
   const store = useMemo<Store>(() => ({
@@ -418,6 +488,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     invitations,
     savedAnswers,
     loading,
+    orgId,
+    orgRole,
     setCompany,
     updateDepartments,
     saveSession,
@@ -445,6 +517,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     completeReminder,
   }), [
     currentUser, users, company, departments, sessions, invitations, savedAnswers, loading,
+    orgId, orgRole,
     setCompany, updateDepartments, saveSession,
     inviteUser, updateUserRole, removeInvitation,
     addQuestion, updateQuestion, removeQuestion,

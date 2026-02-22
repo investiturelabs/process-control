@@ -31,6 +31,8 @@ function setStore(overrides: Partial<Store>) {
       role: 'admin',
       avatarColor: '#000',
     },
+    orgId: 'org1',
+    orgRole: 'admin',
     company: { id: 'c1', name: 'Test Co', logoUrl: '' },
     departments: [],
     users: [],
@@ -59,6 +61,7 @@ describe('SettingsPage', () => {
         role: 'user',
         avatarColor: '#111',
       },
+      orgRole: 'user',
     });
     render(<SettingsPage />);
 
@@ -76,6 +79,7 @@ describe('SettingsPage', () => {
         role: 'user',
         avatarColor: '#111',
       },
+      orgRole: 'user',
       company: { id: 'c1', name: 'Test Co', logoUrl: '' },
     });
     render(<SettingsPage />);
@@ -87,7 +91,7 @@ describe('SettingsPage', () => {
     setStore({});
     render(<SettingsPage />);
 
-    const nameInput = screen.getByLabelText('Company name');
+    const nameInput = screen.getByLabelText('Organization name');
     expect(nameInput).toBeInTheDocument();
     expect(nameInput).toHaveValue('Test Co');
   });
@@ -97,14 +101,14 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     render(<SettingsPage />);
 
-    const nameInput = screen.getByLabelText('Company name');
+    const nameInput = screen.getByLabelText('Organization name');
     await user.clear(nameInput);
 
     const saveButton = screen.getByRole('button', { name: /save/i });
     await user.click(saveButton);
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Company name is required.',
+      'Organization name is required.',
     );
   });
 

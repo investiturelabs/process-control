@@ -13,6 +13,8 @@ vi.mock('@/context', () => ({
 
 function setStore(overrides: Partial<Store>) {
   Object.assign(mockStore, {
+    orgId: 'org1',
+    orgRole: 'admin',
     departments: [],
     addDepartment: vi.fn().mockResolvedValue('dept-new'),
     addQuestion: vi.fn(),

@@ -47,19 +47,26 @@ class HistoryErrorBoundary extends Component<
 }
 
 export function HistoryPage() {
-  const { departments } = useAppStore();
+  const { departments, orgId } = useAppStore();
   const navigate = useNavigate();
   const [filterDept, setFilterDept] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
 
+  const typedOrgId = orgId as import('../../convex/_generated/dataModel').Id<"organizations"> | null;
+
   const paginatedArgs = useMemo(
-    () => (filterDept !== 'all' ? { departmentId: filterDept } : {}),
-    [filterDept],
+    () => {
+      if (!typedOrgId) return null;
+      return filterDept !== 'all'
+        ? { orgId: typedOrgId, departmentId: filterDept }
+        : { orgId: typedOrgId };
+    },
+    [filterDept, typedOrgId],
   );
 
   const { results: rawSessions, status, loadMore } = usePaginatedQuery(
     api.sessions.listPaginated,
-    paginatedArgs,
+    paginatedArgs ?? 'skip',
     { initialNumItems: 25 },
   );
 

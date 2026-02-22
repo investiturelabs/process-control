@@ -22,6 +22,8 @@ function setStore(overrides: Partial<Store>) {
       role: 'admin',
       avatarColor: '#000',
     },
+    orgId: 'org1',
+    orgRole: 'admin',
     users: [
       {
         id: 'u1',
@@ -93,6 +95,7 @@ describe('TeamPage', () => {
         role: 'user',
         avatarColor: '#111',
       },
+      orgRole: 'user',
     });
     render(<TeamPage />);
 
@@ -221,6 +224,7 @@ describe('TeamPage', () => {
         role: 'user',
         avatarColor: '#111',
       },
+      orgRole: 'user',
     });
     render(<TeamPage />);
 

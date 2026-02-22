@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { requireAuth } from "./lib/auth";
+import { requireOrgMember, requireOrgAdmin } from "./lib/auth";
 import { logChange } from "./changeLog";
 
 /** Validates session fields shared by save and update. */
@@ -44,41 +44,45 @@ const answerValidator = v.object({
 });
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireAuth(ctx);
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    const { user, membership } = await requireOrgMember(ctx, orgId);
 
-    // Admins see all sessions; regular users see only their own
-    if (user.role === "admin") {
-      return await ctx.db.query("auditSessions").collect();
+    // Admins see all sessions in the org; regular users see only their own
+    if (membership.role === "admin") {
+      return await ctx.db
+        .query("auditSessions")
+        .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+        .collect();
     }
     return await ctx.db
       .query("auditSessions")
-      .withIndex("by_auditorId", (q) => q.eq("auditorId", user._id))
+      .withIndex("by_orgId_auditorId", (q) => q.eq("orgId", orgId).eq("auditorId", user._id))
       .collect();
   },
 });
 
 export const listPaginated = query({
   args: {
+    orgId: v.id("organizations"),
     paginationOpts: paginationOptsValidator,
     departmentId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireOrgMember(ctx, args.orgId);
 
     let q;
     if (args.departmentId) {
       q = ctx.db
         .query("auditSessions")
-        .withIndex("by_completed_departmentId", (q_) =>
-          q_.eq("completed", true).eq("departmentId", args.departmentId!)
+        .withIndex("by_orgId_completed_departmentId", (q_) =>
+          q_.eq("orgId", args.orgId).eq("completed", true).eq("departmentId", args.departmentId!)
         );
     } else {
       q = ctx.db
         .query("auditSessions")
-        .withIndex("by_completed_departmentId", (q_) =>
-          q_.eq("completed", true)
+        .withIndex("by_orgId_completed_departmentId", (q_) =>
+          q_.eq("orgId", args.orgId).eq("completed", true)
         );
     }
     return await q.order("desc").paginate(args.paginationOpts);
@@ -87,6 +91,7 @@ export const listPaginated = query({
 
 export const update = mutation({
   args: {
+    orgId: v.id("organizations"),
     sessionId: v.id("auditSessions"),
     companyId: v.optional(v.string()),
     departmentId: v.optional(v.string()),
@@ -98,12 +103,12 @@ export const update = mutation({
     completed: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
+    const { user, membership } = await requireOrgMember(ctx, args.orgId);
     const session = await ctx.db.get(args.sessionId);
-    if (!session) throw new Error("Session not found");
+    if (!session || session.orgId !== args.orgId) throw new Error("Session not found");
 
     // Only the auditor who created it or an admin can update
-    if (session.auditorId !== user._id && user.role !== "admin") {
+    if (session.auditorId !== user._id && membership.role !== "admin") {
       throw new Error("Forbidden: you can only update your own sessions");
     }
 
@@ -124,7 +129,7 @@ export const update = mutation({
     if (args.completed === true && args.answers) {
       const questions = await ctx.db
         .query("questions")
-        .withIndex("by_departmentId", (q) => q.eq("departmentId", session.departmentId))
+        .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", args.orgId).eq("departmentId", session.departmentId))
         .collect();
       const qMap = new Map(questions.map((q) => [q._id as string, q]));
 
@@ -150,6 +155,7 @@ export const update = mutation({
         entityType: "session",
         entityId: args.sessionId,
         entityLabel: session.departmentId,
+        orgId: args.orgId,
       });
     }
 
@@ -159,15 +165,16 @@ export const update = mutation({
 
 export const remove = mutation({
   args: {
+    orgId: v.id("organizations"),
     sessionId: v.id("auditSessions"),
   },
-  handler: async (ctx, { sessionId }) => {
-    const user = await requireAuth(ctx);
+  handler: async (ctx, { orgId, sessionId }) => {
+    const { user, membership } = await requireOrgMember(ctx, orgId);
     const session = await ctx.db.get(sessionId);
-    if (!session) throw new Error("Session not found");
+    if (!session || session.orgId !== orgId) throw new Error("Session not found");
 
     // Only the auditor who created it or an admin can delete
-    if (session.auditorId !== user._id && user.role !== "admin") {
+    if (session.auditorId !== user._id && membership.role !== "admin") {
       throw new Error("Forbidden: you can only delete your own sessions");
     }
 
@@ -179,12 +186,14 @@ export const remove = mutation({
       entityType: "session",
       entityId: sessionId,
       entityLabel: session.departmentId,
+      orgId,
     });
   },
 });
 
 export const save = mutation({
   args: {
+    orgId: v.id("organizations"),
     companyId: v.string(),
     departmentId: v.string(),
     date: v.string(),
@@ -195,7 +204,7 @@ export const save = mutation({
     completed: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
+    const { user } = await requireOrgMember(ctx, args.orgId);
 
     validateSessionFields(args);
 
@@ -205,7 +214,7 @@ export const save = mutation({
     if (args.completed) {
       const questions = await ctx.db
         .query("questions")
-        .withIndex("by_departmentId", (q) => q.eq("departmentId", args.departmentId))
+        .withIndex("by_orgId_departmentId", (q) => q.eq("orgId", args.orgId).eq("departmentId", args.departmentId))
         .collect();
       const qMap = new Map(questions.map((q) => [q._id as string, q]));
 
@@ -231,6 +240,7 @@ export const save = mutation({
       answers,
       auditorId: user._id,
       auditorName: user.name,
+      orgId: args.orgId,
     });
 
     if (args.completed) {
@@ -241,6 +251,7 @@ export const save = mutation({
         entityType: "session",
         entityId: id,
         entityLabel: args.departmentId,
+        orgId: args.orgId,
       });
     }
 

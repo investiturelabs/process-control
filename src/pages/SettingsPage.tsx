@@ -12,9 +12,9 @@ import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
 
 export function SettingsPage() {
-  const { company, setCompany, currentUser, departments, generateTestData, users, sessions, invitations } =
+  const { company, setCompany, currentUser, departments, generateTestData, users, sessions, invitations, orgRole } =
     useAppStore();
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = orgRole === 'admin';
   const navigate = useNavigate();
 
   const [companyName, setCompanyName] = useState(company?.name || '');
@@ -29,7 +29,7 @@ export function SettingsPage() {
     e.preventDefault();
     const trimmedName = companyName.trim();
     if (!trimmedName) {
-      setCompanyError('Company name is required.');
+      setCompanyError('Organization name is required.');
       return;
     }
     const trimmedUrl = logoUrl.trim();
@@ -43,7 +43,7 @@ export function SettingsPage() {
       await setCompany({ id: '', name: trimmedName, logoUrl: trimmedUrl || undefined });
     } catch (err) {
       captureException(err);
-      toast.error('Failed to save company settings.');
+      toast.error('Failed to save organization settings.');
     } finally {
       setIsSaving(false);
     }
@@ -60,7 +60,7 @@ export function SettingsPage() {
           <Card className="mt-6">
             <CardContent className="p-4">
               <p className="text-sm">
-                <strong>Company:</strong> {company.name}
+                <strong>Organization:</strong> {company.name}
               </p>
             </CardContent>
           </Card>
@@ -78,14 +78,14 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
             <Building2 size={16} className="text-muted-foreground" />
-            Company
+            Organization
           </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSaveCompany}>
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="companyName">Company name</Label>
+                <Label htmlFor="companyName">Organization name</Label>
                 <Input
                   id="companyName"
                   type="text"
@@ -166,7 +166,7 @@ export function SettingsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-3">
-            Export all company data as JSON. Contains departments, questions, audit history, users, and invitations.
+            Export all organization data as JSON. Contains departments, questions, audit history, users, and invitations.
           </p>
           <Button
             size="sm"

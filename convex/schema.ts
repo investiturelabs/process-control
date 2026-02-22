@@ -5,7 +5,6 @@ export default defineSchema({
   users: defineTable({
     name: v.string(),
     email: v.string(),
-    role: v.union(v.literal("admin"), v.literal("user")),
     avatarColor: v.string(),
     active: v.optional(v.boolean()),
     tokenIdentifier: v.string(),
@@ -13,17 +12,32 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_token", ["tokenIdentifier"]),
 
-  companies: defineTable({
+  organizations: defineTable({
     name: v.string(),
     logoUrl: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.string(),
   }),
+
+  orgMembers: defineTable({
+    orgId: v.id("organizations"),
+    userId: v.id("users"),
+    role: v.union(v.literal("admin"), v.literal("user")),
+    joinedAt: v.string(),
+  })
+    .index("by_orgId", ["orgId"])
+    .index("by_userId", ["userId"])
+    .index("by_orgId_userId", ["orgId", "userId"]),
 
   departments: defineTable({
     stableId: v.string(),
     name: v.string(),
     icon: v.string(),
     sortOrder: v.number(),
-  }).index("by_stableId", ["stableId"]),
+    orgId: v.id("organizations"),
+  })
+    .index("by_orgId", ["orgId"])
+    .index("by_orgId_stableId", ["orgId", "stableId"]),
 
   questions: defineTable({
     departmentId: v.string(),
@@ -38,7 +52,9 @@ export default defineSchema({
     pointsPartial: v.number(),
     pointsNo: v.number(),
     sortOrder: v.number(),
-  }).index("by_departmentId", ["departmentId"]),
+    orgId: v.id("organizations"),
+  })
+    .index("by_orgId_departmentId", ["orgId", "departmentId"]),
 
   auditSessions: defineTable({
     companyId: v.string(),
@@ -70,9 +86,11 @@ export default defineSchema({
     maxPoints: v.number(),
     percentage: v.number(),
     completed: v.boolean(),
-  }).index("by_departmentId", ["departmentId"])
-    .index("by_auditorId", ["auditorId"])
-    .index("by_completed_departmentId", ["completed", "departmentId"]),
+    orgId: v.id("organizations"),
+  }).index("by_orgId", ["orgId"])
+    .index("by_orgId_departmentId", ["orgId", "departmentId"])
+    .index("by_orgId_auditorId", ["orgId", "auditorId"])
+    .index("by_orgId_completed_departmentId", ["orgId", "completed", "departmentId"]),
 
   // PCT-14: Change log for audit trail
   changeLog: defineTable({
@@ -84,8 +102,10 @@ export default defineSchema({
     entityId: v.optional(v.string()),
     entityLabel: v.optional(v.string()),
     details: v.optional(v.string()),
+    orgId: v.id("organizations"),
   }).index("by_timestamp", ["timestamp"])
-    .index("by_entityType_timestamp", ["entityType", "timestamp"]),
+    .index("by_orgId_timestamp", ["orgId", "timestamp"])
+    .index("by_orgId_entityType_timestamp", ["orgId", "entityType", "timestamp"]),
 
   invitations: defineTable({
     email: v.string(),
@@ -93,8 +113,10 @@ export default defineSchema({
     status: v.union(v.literal("pending"), v.literal("accepted")),
     createdAt: v.string(),
     expiresAt: v.optional(v.string()),
-  }).index("by_email", ["email"])
-    .index("by_status", ["status"]),
+    orgId: v.id("organizations"),
+  }).index("by_status", ["status"])
+    .index("by_orgId", ["orgId"])
+    .index("by_orgId_email", ["orgId", "email"]),
 
   savedAnswers: defineTable({
     questionId: v.string(),
@@ -106,8 +128,9 @@ export default defineSchema({
     savedByName: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),
-  }).index("by_questionId", ["questionId"])
-    .index("by_departmentId", ["departmentId"]),
+    orgId: v.id("organizations"),
+  }).index("by_orgId_questionId", ["orgId", "questionId"])
+    .index("by_orgId_departmentId", ["orgId", "departmentId"]),
 
   reminders: defineTable({
     questionId: v.optional(v.string()),
@@ -132,9 +155,9 @@ export default defineSchema({
     createdByName: v.string(),
     createdAt: v.string(),
     active: v.boolean(),
-  }).index("by_active", ["active"])
-    .index("by_questionId", ["questionId"])
-    .index("by_departmentId", ["departmentId"]),
+    orgId: v.id("organizations"),
+  }).index("by_orgId", ["orgId"])
+    .index("by_orgId_active", ["orgId", "active"]),
 
   reminderCompletions: defineTable({
     reminderId: v.string(),
@@ -142,5 +165,6 @@ export default defineSchema({
     completedBy: v.string(),
     completedByName: v.string(),
     note: v.optional(v.string()),
-  }).index("by_reminderId", ["reminderId"]),
+    orgId: v.id("organizations"),
+  }).index("by_orgId_reminderId", ["orgId", "reminderId"]),
 });

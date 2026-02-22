@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAuth } from "./lib/auth";
+import { requireOrgMember } from "./lib/auth";
 import { logChange } from "./changeLog";
 import { computeNextDueAt } from "./lib/reminderUtils";
 import type { ReminderFrequency } from "./lib/reminderUtils";
@@ -17,48 +17,60 @@ const frequencyValidator = v.union(
 );
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAuth(ctx);
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    await requireOrgMember(ctx, orgId);
     return await ctx.db
       .query("reminders")
-      .withIndex("by_active", (q) => q.eq("active", true))
+      .withIndex("by_orgId_active", (q) => q.eq("orgId", orgId).eq("active", true))
       .collect();
   },
 });
 
 export const listAll = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAuth(ctx);
-    return await ctx.db.query("reminders").collect();
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    await requireOrgMember(ctx, orgId);
+    return await ctx.db
+      .query("reminders")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
   },
 });
 
 export const listByQuestion = query({
-  args: { questionId: v.string() },
-  handler: async (ctx, { questionId }) => {
-    await requireAuth(ctx);
-    return await ctx.db
+  args: {
+    orgId: v.id("organizations"),
+    questionId: v.string(),
+  },
+  handler: async (ctx, { orgId, questionId }) => {
+    await requireOrgMember(ctx, orgId);
+    const all = await ctx.db
       .query("reminders")
-      .withIndex("by_questionId", (q) => q.eq("questionId", questionId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
       .collect();
+    return all.filter((r) => r.questionId === questionId);
   },
 });
 
 export const listByDepartment = query({
-  args: { departmentId: v.string() },
-  handler: async (ctx, { departmentId }) => {
-    await requireAuth(ctx);
-    return await ctx.db
+  args: {
+    orgId: v.id("organizations"),
+    departmentId: v.string(),
+  },
+  handler: async (ctx, { orgId, departmentId }) => {
+    await requireOrgMember(ctx, orgId);
+    const all = await ctx.db
       .query("reminders")
-      .withIndex("by_departmentId", (q) => q.eq("departmentId", departmentId))
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
       .collect();
+    return all.filter((r) => r.departmentId === departmentId);
   },
 });
 
 export const create = mutation({
   args: {
+    orgId: v.id("organizations"),
     title: v.string(),
     description: v.optional(v.string()),
     frequency: frequencyValidator,
@@ -68,7 +80,7 @@ export const create = mutation({
     startDate: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
+    const { user } = await requireOrgMember(ctx, args.orgId);
 
     const cleanTitle = sanitize(args.title, "title", MAX_LENGTHS.text);
     const cleanDescription = args.description?.trim() || undefined;
@@ -97,6 +109,7 @@ export const create = mutation({
       createdByName: user.name,
       createdAt: now,
       active: true,
+      orgId: args.orgId,
     });
 
     await logChange(ctx, {
@@ -111,6 +124,7 @@ export const create = mutation({
         questionId: args.questionId,
         departmentId: args.departmentId,
       }),
+      orgId: args.orgId,
     });
 
     return id;
@@ -119,6 +133,7 @@ export const create = mutation({
 
 export const update = mutation({
   args: {
+    orgId: v.id("organizations"),
     reminderId: v.id("reminders"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -128,11 +143,11 @@ export const update = mutation({
     departmentId: v.optional(v.string()),
     active: v.optional(v.boolean()),
   },
-  handler: async (ctx, { reminderId, ...fields }) => {
-    const user = await requireAuth(ctx);
+  handler: async (ctx, { orgId, reminderId, ...fields }) => {
+    const { user } = await requireOrgMember(ctx, orgId);
 
     const old = await ctx.db.get(reminderId);
-    if (!old) throw new Error("Reminder not found");
+    if (!old || old.orgId !== orgId) throw new Error("Reminder not found");
 
     const patch: Record<string, unknown> = {};
 
@@ -176,24 +191,26 @@ export const update = mutation({
       entityId: reminderId,
       entityLabel: old.title,
       details: JSON.stringify(patch),
+      orgId,
     });
   },
 });
 
 export const remove = mutation({
   args: {
+    orgId: v.id("organizations"),
     reminderId: v.id("reminders"),
   },
-  handler: async (ctx, { reminderId }) => {
-    const user = await requireAuth(ctx);
+  handler: async (ctx, { orgId, reminderId }) => {
+    const { user } = await requireOrgMember(ctx, orgId);
 
     const old = await ctx.db.get(reminderId);
-    if (!old) throw new Error("Reminder not found");
+    if (!old || old.orgId !== orgId) throw new Error("Reminder not found");
 
     // Delete all completions for this reminder
     const completions = await ctx.db
       .query("reminderCompletions")
-      .withIndex("by_reminderId", (q) => q.eq("reminderId", reminderId))
+      .withIndex("by_orgId_reminderId", (q) => q.eq("orgId", orgId).eq("reminderId", reminderId))
       .collect();
     for (const c of completions) {
       await ctx.db.delete(c._id);
@@ -208,20 +225,22 @@ export const remove = mutation({
       entityType: "reminder",
       entityId: reminderId,
       entityLabel: old.title,
+      orgId,
     });
   },
 });
 
 export const complete = mutation({
   args: {
+    orgId: v.id("organizations"),
     reminderId: v.id("reminders"),
     note: v.optional(v.string()),
   },
-  handler: async (ctx, { reminderId, note }) => {
-    const user = await requireAuth(ctx);
+  handler: async (ctx, { orgId, reminderId, note }) => {
+    const { user } = await requireOrgMember(ctx, orgId);
 
     const reminder = await ctx.db.get(reminderId);
-    if (!reminder) throw new Error("Reminder not found");
+    if (!reminder || reminder.orgId !== orgId) throw new Error("Reminder not found");
 
     const now = new Date();
     const completedAt = now.toISOString();
@@ -233,6 +252,7 @@ export const complete = mutation({
       completedBy: user._id,
       completedByName: user.name,
       note: note?.trim() || undefined,
+      orgId,
     });
 
     // Advance nextDueAt
@@ -254,17 +274,21 @@ export const complete = mutation({
       entityId: reminderId,
       entityLabel: reminder.title,
       details: JSON.stringify({ note: note?.trim() }),
+      orgId,
     });
   },
 });
 
 export const getCompletions = query({
-  args: { reminderId: v.string() },
-  handler: async (ctx, { reminderId }) => {
-    await requireAuth(ctx);
+  args: {
+    orgId: v.id("organizations"),
+    reminderId: v.string(),
+  },
+  handler: async (ctx, { orgId, reminderId }) => {
+    await requireOrgMember(ctx, orgId);
     return await ctx.db
       .query("reminderCompletions")
-      .withIndex("by_reminderId", (q) => q.eq("reminderId", reminderId))
+      .withIndex("by_orgId_reminderId", (q) => q.eq("orgId", orgId).eq("reminderId", reminderId))
       .order("desc")
       .collect();
   },

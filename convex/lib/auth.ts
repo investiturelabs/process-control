@@ -1,5 +1,5 @@
 import type { GenericQueryCtx, GenericMutationCtx } from "convex/server";
-import type { DataModel } from "../_generated/dataModel";
+import type { DataModel, Id } from "../_generated/dataModel";
 
 type QueryCtx = GenericQueryCtx<DataModel>;
 type MutationCtx = GenericMutationCtx<DataModel>;
@@ -28,13 +28,42 @@ export async function requireAuth(ctx: QueryCtx | MutationCtx) {
 }
 
 /**
- * Requires an authenticated admin user. Calls requireAuth then checks role.
- * Throws if user is not an admin.
+ * Requires the authenticated user to be a member of the given org.
+ * Returns the user doc and their orgMembers membership row.
  */
-export async function requireAdmin(ctx: QueryCtx | MutationCtx) {
+export async function requireOrgMember(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<"organizations">,
+) {
   const user = await requireAuth(ctx);
-  if (user.role !== "admin") {
-    throw new Error("Forbidden: admin access required");
+
+  const membership = await ctx.db
+    .query("orgMembers")
+    .withIndex("by_orgId_userId", (q) =>
+      q.eq("orgId", orgId).eq("userId", user._id),
+    )
+    .unique();
+
+  if (!membership) {
+    throw new Error("Forbidden: not a member of this organization");
   }
-  return user;
+
+  return { user, membership };
+}
+
+/**
+ * Requires the authenticated user to be an admin of the given org.
+ * Returns the user doc and their orgMembers membership row.
+ */
+export async function requireOrgAdmin(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<"organizations">,
+) {
+  const { user, membership } = await requireOrgMember(ctx, orgId);
+
+  if (membership.role !== "admin") {
+    throw new Error("Forbidden: org admin access required");
+  }
+
+  return { user, membership };
 }

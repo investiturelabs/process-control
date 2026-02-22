@@ -29,9 +29,9 @@ import { captureException } from '@/lib/errorTracking';
 import { ReminderFormDialog } from '@/components/ReminderFormDialog';
 
 export function QuestionsPage() {
-  const { currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment, savedAnswers, saveSavedAnswer, removeSavedAnswer, loading } =
+  const { currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment, savedAnswers, saveSavedAnswer, removeSavedAnswer, loading, orgRole } =
     useAppStore();
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = orgRole === 'admin';
 
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [showSeedDialog, setShowSeedDialog] = useState(false);

@@ -44,6 +44,7 @@ export function TeamPage() {
     updateUserRole,
     removeInvitation,
     setUserActive,
+    orgRole,
   } = useAppStore();
 
   const [inviteEmail, setInviteEmail] = useState('');
@@ -53,7 +54,7 @@ export function TeamPage() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
-  const isAdmin = currentUser?.role === 'admin';
+  const isAdmin = orgRole === 'admin';
 
   // Fix #17 + #35: Await inviteUser with duplicate check
   const handleInvite = async (e: React.FormEvent) => {

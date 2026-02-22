@@ -305,9 +305,11 @@ function ReminderRow({
         ? 'border-l-4 border-l-amber-400'
         : 'border-l-4 border-l-transparent';
 
+  const { orgId } = useAppStore();
+  const typedOrgId = orgId as import('../../convex/_generated/dataModel').Id<"organizations"> | null;
   const completions = useQuery(
     api.reminders.getCompletions,
-    isExpanded ? { reminderId: reminder.id } : 'skip'
+    (isExpanded && typedOrgId) ? { orgId: typedOrgId, reminderId: reminder.id } : 'skip'
   );
 
   return (

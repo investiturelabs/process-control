@@ -9,13 +9,15 @@
  */
 
 import type * as changeLog from "../changeLog.js";
-import type * as companies from "../companies.js";
 import type * as crons from "../crons.js";
 import type * as departments from "../departments.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_reminderUtils from "../lib/reminderUtils.js";
 import type * as lib_validators from "../lib/validators.js";
+import type * as migrations_backfillOrgId from "../migrations/backfillOrgId.js";
+import type * as migrations_stripUserRole from "../migrations/stripUserRole.js";
+import type * as organizations from "../organizations.js";
 import type * as questions from "../questions.js";
 import type * as reminders from "../reminders.js";
 import type * as savedAnswers from "../savedAnswers.js";
@@ -32,13 +34,15 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   changeLog: typeof changeLog;
-  companies: typeof companies;
   crons: typeof crons;
   departments: typeof departments;
   invitations: typeof invitations;
   "lib/auth": typeof lib_auth;
   "lib/reminderUtils": typeof lib_reminderUtils;
   "lib/validators": typeof lib_validators;
+  "migrations/backfillOrgId": typeof migrations_backfillOrgId;
+  "migrations/stripUserRole": typeof migrations_stripUserRole;
+  organizations: typeof organizations;
   questions: typeof questions;
   reminders: typeof reminders;
   savedAnswers: typeof savedAnswers;

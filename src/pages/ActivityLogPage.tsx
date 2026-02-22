@@ -20,7 +20,7 @@ const ENTITY_TYPES = [
   { value: 'department', label: 'Departments' },
   { value: 'user', label: 'Users' },
   { value: 'session', label: 'Sessions' },
-  { value: 'company', label: 'Company' },
+  { value: 'organization', label: 'Organization' },
   { value: 'invitation', label: 'Invitations' },
   { value: 'savedAnswer', label: 'Saved Answers' },
 ] as const;
@@ -40,7 +40,7 @@ const ACTION_LABELS: Record<string, string> = {
   'user.deactivate': 'deactivated',
   'session.complete': 'completed audit for',
   'session.remove': 'removed audit session',
-  'company.update': 'updated company',
+  'organization.update': 'updated organization',
   'invitation.create': 'invited',
   'invitation.remove': 'revoked invitation for',
   'invitation.expiredCleanup': 'expired invitations cleaned up',
@@ -70,18 +70,25 @@ function formatTimestamp(ts: string): string {
 }
 
 export function ActivityLogPage() {
-  const { currentUser } = useAppStore();
-  const isAdmin = currentUser?.role === 'admin';
+  const { currentUser, orgId, orgRole } = useAppStore();
+  const isAdmin = orgRole === 'admin';
   const [entityType, setEntityType] = useState<string>('all');
 
+  const typedOrgId = orgId as import('../../convex/_generated/dataModel').Id<"organizations"> | null;
+
   const paginatedArgs = useMemo(
-    () => (entityType !== 'all' ? { entityType } : {}),
-    [entityType],
+    () => {
+      if (!typedOrgId) return null;
+      return entityType !== 'all'
+        ? { orgId: typedOrgId, entityType }
+        : { orgId: typedOrgId };
+    },
+    [entityType, typedOrgId],
   );
 
   const { results, status, loadMore } = usePaginatedQuery(
     api.changeLog.list,
-    isAdmin ? paginatedArgs : 'skip',
+    (isAdmin && paginatedArgs) ? paginatedArgs : 'skip',
     { initialNumItems: 25 },
   );
 

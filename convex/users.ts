@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAuth, requireAdmin } from "./lib/auth";
+import { requireAuth, requireOrgAdmin, requireOrgMember } from "./lib/auth";
 import { logChange } from "./changeLog";
 
 const AVATAR_COLORS = [
@@ -35,13 +35,12 @@ export const me = query({
 
 /**
  * Creates or retrieves a Convex user after Clerk authentication.
- * Uses the JWT identity (server-verified, unspoofable) to:
- * - Return existing user if already linked by tokenIdentifier
- * - Create new user: first user = admin, checks pending invitations for role
- * - Marks matched invitation as "accepted"
- *
- * Convex OCC (serializable transactions) prevents two simultaneous first-users —
- * if two sign up at the same time, one transaction will retry and see the other's user.
+ * New flow with org support:
+ * 1. Return existing user if already linked by tokenIdentifier
+ * 2. Check for pending invitation (org-scoped):
+ *    - Found: Create user, join existing org with invited role
+ *    - Not found: Create user, create new org, user becomes org admin
+ * 3. Return { user, orgId } so frontend knows which org to load
  */
 export const getOrCreateFromClerk = mutation({
   args: {},
@@ -61,90 +60,141 @@ export const getOrCreateFromClerk = mutation({
       if (existing.active === false) {
         throw new Error("Account deactivated. Contact your administrator.");
       }
-      return existing;
+
+      // Find their first org membership for the return value
+      const membership = await ctx.db
+        .query("orgMembers")
+        .withIndex("by_userId", (q) => q.eq("userId", existing._id))
+        .first();
+
+      return { ...existing, orgId: membership?.orgId ?? null };
     }
 
-    // Determine role: first user = admin, invited users get invited role, otherwise "user"
     const allUsers = await ctx.db.query("users").collect();
     const realUsers = allUsers.filter(u => !u.tokenIdentifier.startsWith("test|"));
     const isFirst = realUsers.length === 0;
 
     const email = (identity.email ?? "").toLowerCase();
-    let role: "admin" | "user" = isFirst ? "admin" : "user";
 
-    // Check for pending invitation
+    // Check for pending invitation (org-scoped)
     const now = new Date().toISOString();
     let matchedInvitation = null;
     if (!isFirst && email) {
-      matchedInvitation = await ctx.db
+      const allPending = await ctx.db
         .query("invitations")
-        .withIndex("by_email", (q) => q.eq("email", email))
-        .first();
+        .withIndex("by_status", (q) => q.eq("status", "pending"))
+        .collect();
+      matchedInvitation = allPending.find(inv => inv.email === email) ?? null;
 
       const hasValidInvitation =
         matchedInvitation &&
-        matchedInvitation.status === "pending" &&
         (!matchedInvitation.expiresAt || matchedInvitation.expiresAt > now);
 
-      if (hasValidInvitation) {
-        role = matchedInvitation!.role;
-      } else {
+      if (!hasValidInvitation) {
         matchedInvitation = null;
       }
     }
 
     // Create the user
     const name = identity.name ?? identity.email ?? "User";
-    const id = await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       name,
       email,
-      role,
       avatarColor: AVATAR_COLORS[allUsers.length % AVATAR_COLORS.length],
       tokenIdentifier: identity.tokenIdentifier,
     });
 
-    // Mark invitation as accepted
-    if (matchedInvitation && matchedInvitation.status === "pending") {
+    let orgId;
+    let orgRole: "admin" | "user";
+
+    if (matchedInvitation && matchedInvitation.orgId) {
+      // Invited user: join the inviting org
+      orgId = matchedInvitation.orgId;
+      orgRole = matchedInvitation.role;
+      await ctx.db.insert("orgMembers", {
+        orgId,
+        userId,
+        role: orgRole,
+        joinedAt: now,
+      });
+
+      // Mark invitation as accepted
       await ctx.db.patch(matchedInvitation._id, { status: "accepted" as const });
+    } else {
+      // New user (with or without legacy invitation): create org and become admin
+      if (matchedInvitation) {
+        await ctx.db.patch(matchedInvitation._id, { status: "accepted" as const });
+      }
+
+      orgId = await ctx.db.insert("organizations", {
+        name: "My Organization",
+        createdBy: userId,
+        createdAt: now,
+      });
+
+      orgRole = "admin";
+      await ctx.db.insert("orgMembers", {
+        orgId,
+        userId,
+        role: orgRole,
+        joinedAt: now,
+      });
     }
 
     await logChange(ctx, {
-      actorId: id,
+      actorId: userId,
       actorName: name,
       action: "user.created",
       entityType: "user",
-      entityId: id,
+      entityId: userId,
       entityLabel: name,
-      details: JSON.stringify({ email, role }),
+      details: JSON.stringify({ email, orgRole }),
+      orgId,
     });
 
-    return (await ctx.db.get(id))!;
+    const user = (await ctx.db.get(userId))!;
+    return { ...user, orgId, role: orgRole };
   },
 });
 
 /**
- * List all users. Requires authentication.
+ * List users who are members of a given org.
  */
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAuth(ctx);
-    const users = await ctx.db.query("users").collect();
-    // Strip tokenIdentifier — internal Clerk binding key, not for client exposure
-    return users.map(({ tokenIdentifier, ...rest }) => rest);
+  args: { orgId: v.id("organizations") },
+  handler: async (ctx, { orgId }) => {
+    await requireOrgMember(ctx, orgId);
+
+    const memberships = await ctx.db
+      .query("orgMembers")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .collect();
+
+    const users = await Promise.all(
+      memberships.map(async (m) => {
+        const user = await ctx.db.get(m.userId);
+        if (!user) return null;
+        // Strip tokenIdentifier, use org-level role
+        const { tokenIdentifier, ...rest } = user;
+        return { ...rest, role: m.role };
+      }),
+    );
+
+    return users.filter(Boolean);
   },
 });
 
 /**
- * Update a user's role. Admin only. Prevents self-demotion.
+ * Update a user's role within an org. Org admin only. Prevents self-demotion.
  */
 export const updateRole = mutation({
   args: {
+    orgId: v.id("organizations"),
     userId: v.id("users"),
     role: v.union(v.literal("admin"), v.literal("user")),
   },
-  handler: async (ctx, { userId, role }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, userId, role }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     if (admin._id === userId && role !== "admin") {
       throw new Error("Cannot demote yourself");
@@ -153,17 +203,28 @@ export const updateRole = mutation({
     const target = await ctx.db.get(userId);
     if (!target) throw new Error("User not found");
 
-    // Prevent demoting the last admin — would create an unrecoverable zero-admin state
-    if (target.role === "admin" && role !== "admin") {
-      const allUsers = await ctx.db.query("users").collect();
-      const adminCount = allUsers.filter((u) => u.role === "admin").length;
+    // Find the target's membership in this org
+    const membership = await ctx.db
+      .query("orgMembers")
+      .withIndex("by_orgId_userId", (q) => q.eq("orgId", orgId).eq("userId", userId))
+      .unique();
+    if (!membership) throw new Error("User is not a member of this organization");
+
+    const oldRole = membership.role;
+
+    // Prevent demoting the last admin
+    if (oldRole === "admin" && role !== "admin") {
+      const allMembers = await ctx.db
+        .query("orgMembers")
+        .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+        .collect();
+      const adminCount = allMembers.filter((m) => m.role === "admin").length;
       if (adminCount <= 1) {
         throw new Error("Cannot demote the last admin");
       }
     }
 
-    const oldRole = target.role;
-    await ctx.db.patch(userId, { role });
+    await ctx.db.patch(membership._id, { role });
 
     await logChange(ctx, {
       actorId: admin._id,
@@ -173,30 +234,51 @@ export const updateRole = mutation({
       entityId: userId,
       entityLabel: target.name,
       details: JSON.stringify({ from: oldRole, to: role }),
+      orgId,
     });
   },
 });
 
 /**
- * Activate or deactivate a user. Admin only.
+ * Activate or deactivate a user. Org admin only.
  */
 export const setActive = mutation({
   args: {
+    orgId: v.id("organizations"),
     userId: v.id("users"),
     active: v.boolean(),
   },
-  handler: async (ctx, { userId, active }) => {
-    const admin = await requireAdmin(ctx);
+  handler: async (ctx, { orgId, userId, active }) => {
+    const { user: admin } = await requireOrgAdmin(ctx, orgId);
 
     const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
-    if (!active && user.role === "admin") {
-      const activeAdmins = (await ctx.db.query("users").collect())
-        .filter((u) => u.role === "admin" && u.active !== false && u._id !== userId);
-      if (activeAdmins.length === 0) {
+
+    // Check membership
+    const membership = await ctx.db
+      .query("orgMembers")
+      .withIndex("by_orgId_userId", (q) => q.eq("orgId", orgId).eq("userId", userId))
+      .unique();
+    if (!membership) throw new Error("User is not a member of this organization");
+
+    if (!active && membership.role === "admin") {
+      const allMembers = await ctx.db
+        .query("orgMembers")
+        .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+        .collect();
+      const activeAdminMembers = await Promise.all(
+        allMembers
+          .filter((m) => m.role === "admin" && m.userId !== userId)
+          .map(async (m) => {
+            const u = await ctx.db.get(m.userId);
+            return u && u.active !== false ? u : null;
+          }),
+      );
+      if (activeAdminMembers.filter(Boolean).length === 0) {
         throw new Error("Cannot deactivate the last admin");
       }
     }
+
     await ctx.db.patch(userId, { active });
 
     await logChange(ctx, {
@@ -206,6 +288,7 @@ export const setActive = mutation({
       entityType: "user",
       entityId: userId,
       entityLabel: user.name,
+      orgId,
     });
   },
 });

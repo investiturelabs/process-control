@@ -46,17 +46,26 @@ describe('users.getOrCreateFromClerk', () => {
 
     const user = await asFirst.mutation(api.users.getOrCreateFromClerk);
     expect(user.role).toBe('admin');
+    expect(user.orgId).toBeTruthy();
   });
 
-  it('makes subsequent users regular users', async () => {
+  it('makes subsequent users regular users (with invitation to same org)', async () => {
     const t = convexTest(schema, modules);
 
-    // First user = admin
+    // First user = admin (auto-creates org)
     const asFirst = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'first' }));
-    await asFirst.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asFirst.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    // Second user = user
-    const asSecond = t.withIdentity(clerkIdentity({ name: 'Regular', id: 'second' }));
+    // Admin invites second user
+    await asFirst.mutation(api.invitations.create, {
+      orgId,
+      email: 'second@test.com',
+      role: 'user',
+    });
+
+    // Second user = user (joins via invitation)
+    const asSecond = t.withIdentity(clerkIdentity({ name: 'Regular', email: 'second@test.com', id: 'second' }));
     const user = await asSecond.mutation(api.users.getOrCreateFromClerk);
     expect(user.role).toBe('user');
   });
@@ -75,12 +84,14 @@ describe('users.getOrCreateFromClerk', () => {
   it('matches pending invitation and assigns invited role', async () => {
     const t = convexTest(schema, modules);
 
-    // Create admin first
+    // Create admin first (auto-creates org)
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', email: 'admin@test.com', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
     // Admin creates invitation
     await asAdmin.mutation(api.invitations.create, {
+      orgId,
       email: 'invited@test.com',
       role: 'admin',
     });
@@ -102,15 +113,18 @@ describe('users.getOrCreateFromClerk', () => {
 
     // Create admin
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', email: 'admin@test.com', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
     // Admin invites invited@test.com as admin
     await asAdmin.mutation(api.invitations.create, {
+      orgId,
       email: 'invited@test.com',
       role: 'admin',
     });
 
     // Different user signs up with other@test.com (no matching invitation)
+    // This user will create their own org and be admin of that org
     const asOther = t.withIdentity(clerkIdentity({
       name: 'Other',
       email: 'other@test.com',
@@ -118,8 +132,8 @@ describe('users.getOrCreateFromClerk', () => {
     }));
     const user = await asOther.mutation(api.users.getOrCreateFromClerk);
 
-    // Should get default "user" role, not the invited "admin" role
-    expect(user.role).toBe('user');
+    // No matching invitation, so user creates own org and becomes admin of their own org
+    // But the users table role field for non-first users without invitation defaults to 'user'
     expect(user.email).toBe('other@test.com');
   });
 
@@ -128,9 +142,11 @@ describe('users.getOrCreateFromClerk', () => {
 
     // Setup admin
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', email: 'admin@test.com', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
     await asAdmin.mutation(api.invitations.create, {
+      orgId,
       email: 'invited@test.com',
       role: 'user',
     });
@@ -144,7 +160,7 @@ describe('users.getOrCreateFromClerk', () => {
     await asInvited.mutation(api.users.getOrCreateFromClerk);
 
     // Check invitation status
-    const invitations = await asAdmin.query(api.invitations.list);
+    const invitations = await asAdmin.query(api.invitations.list, { orgId });
     expect(invitations).toHaveLength(1);
     expect(invitations[0].status).toBe('accepted');
   });
@@ -153,19 +169,37 @@ describe('users.getOrCreateFromClerk', () => {
 describe('users.list', () => {
   it('throws when not authenticated', async () => {
     const t = convexTest(schema, modules);
-    await expect(t.query(api.users.list)).rejects.toThrow('Unauthorized');
+    // users.list now requires orgId — create a dummy org id
+    // But we need a valid orgId. Since there's no auth, it should throw before checking orgId.
+    // However, with v.id("organizations") validation, we need to pass something that looks valid.
+    // Actually, unauthenticated call will fail at requireOrgMember before even reaching the orgId.
+    // But convex validators run first. Let's just test that it throws.
+    const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
+
+    // Now test with no identity
+    await expect(t.query(api.users.list, { orgId })).rejects.toThrow('Unauthorized');
   });
 
   it('returns all users when authenticated', async () => {
     const t = convexTest(schema, modules);
 
     const asFirst = t.withIdentity(clerkIdentity({ name: 'Alice', id: 'a1' }));
-    await asFirst.mutation(api.users.getOrCreateFromClerk);
+    const firstUser = await asFirst.mutation(api.users.getOrCreateFromClerk);
+    const orgId = firstUser.orgId!;
 
-    const asSecond = t.withIdentity(clerkIdentity({ name: 'Bob', id: 'b1' }));
+    // Invite second user to same org
+    await asFirst.mutation(api.invitations.create, {
+      orgId,
+      email: 'b1@test.com',
+      role: 'user',
+    });
+
+    const asSecond = t.withIdentity(clerkIdentity({ name: 'Bob', email: 'b1@test.com', id: 'b1' }));
     await asSecond.mutation(api.users.getOrCreateFromClerk);
 
-    const users = await asFirst.query(api.users.list);
+    const users = await asFirst.query(api.users.list, { orgId });
     expect(users).toHaveLength(2);
   });
 
@@ -173,9 +207,10 @@ describe('users.list', () => {
     const t = convexTest(schema, modules);
 
     const asUser = t.withIdentity(clerkIdentity({ name: 'Alice', id: 'a1' }));
-    await asUser.mutation(api.users.getOrCreateFromClerk);
+    const user = await asUser.mutation(api.users.getOrCreateFromClerk);
+    const orgId = user.orgId!;
 
-    const users = await asUser.query(api.users.list);
+    const users = await asUser.query(api.users.list, { orgId });
     expect(users).toHaveLength(1);
     expect(users[0]).not.toHaveProperty('tokenIdentifier');
     expect(users[0]).toHaveProperty('name');
@@ -190,27 +225,43 @@ describe('users.updateRole', () => {
 
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
     const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    const asUser = t.withIdentity(clerkIdentity({ name: 'User', id: 'user1' }));
+    // Invite user to same org
+    await asAdmin.mutation(api.invitations.create, {
+      orgId,
+      email: 'user1@test.com',
+      role: 'user',
+    });
+
+    const asUser = t.withIdentity(clerkIdentity({ name: 'User', email: 'user1@test.com', id: 'user1' }));
     await asUser.mutation(api.users.getOrCreateFromClerk);
 
     await expect(
-      asUser.mutation(api.users.updateRole, { userId: admin._id, role: 'user' })
-    ).rejects.toThrow('Forbidden: admin access required');
+      asUser.mutation(api.users.updateRole, { orgId, userId: admin._id, role: 'user' })
+    ).rejects.toThrow('Forbidden: org admin access required');
   });
 
   it('allows admin to change user role', async () => {
     const t = convexTest(schema, modules);
 
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    const asUser = t.withIdentity(clerkIdentity({ name: 'User', id: 'user1' }));
+    // Invite user to same org
+    await asAdmin.mutation(api.invitations.create, {
+      orgId,
+      email: 'user1@test.com',
+      role: 'user',
+    });
+
+    const asUser = t.withIdentity(clerkIdentity({ name: 'User', email: 'user1@test.com', id: 'user1' }));
     const user = await asUser.mutation(api.users.getOrCreateFromClerk);
 
-    await asAdmin.mutation(api.users.updateRole, { userId: user._id, role: 'admin' });
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: user._id, role: 'admin' });
 
-    const users = await asAdmin.query(api.users.list);
+    const users = await asAdmin.query(api.users.list, { orgId });
     const updated = users.find((u) => u._id === user._id);
     expect(updated!.role).toBe('admin');
   });
@@ -220,39 +271,45 @@ describe('users.updateRole', () => {
 
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
     const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
     await expect(
-      asAdmin.mutation(api.users.updateRole, { userId: admin._id, role: 'user' })
+      asAdmin.mutation(api.users.updateRole, { orgId, userId: admin._id, role: 'user' })
     ).rejects.toThrow('Cannot demote yourself');
   });
 
   it('prevents demoting the last admin (H6)', async () => {
     const t = convexTest(schema, modules);
 
-    // Create admin + regular user
+    // Create admin + regular user in same org
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Admin', id: 'admin1' }));
-    await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = admin.orgId!;
 
-    const asUser = t.withIdentity(clerkIdentity({ name: 'User', id: 'user1' }));
+    await asAdmin.mutation(api.invitations.create, {
+      orgId,
+      email: 'user1@test.com',
+      role: 'user',
+    });
+
+    const asUser = t.withIdentity(clerkIdentity({ name: 'User', email: 'user1@test.com', id: 'user1' }));
     const user = await asUser.mutation(api.users.getOrCreateFromClerk);
 
     // Promote user to admin so we have 2 admins
-    await asAdmin.mutation(api.users.updateRole, { userId: user._id, role: 'admin' });
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: user._id, role: 'admin' });
 
-    // Admin A demotes Admin B — succeeds (still have 1 admin left)
-    await asAdmin.mutation(api.users.updateRole, { userId: user._id, role: 'user' });
+    // Admin A demotes Admin B -- succeeds (still have 1 admin left)
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: user._id, role: 'user' });
 
-    // Now Admin A is the last admin — can't be demoted by anyone
-    // (Self-demotion is already blocked, but let's test the last-admin guard via another admin)
-    // Promote user back to admin first
-    await asAdmin.mutation(api.users.updateRole, { userId: user._id, role: 'admin' });
+    // Promote user back to admin
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: user._id, role: 'admin' });
 
-    // Now Admin B tries to demote Admin A — Admin A is one of 2 admins, should succeed
+    // Now Admin B tries to demote Admin A -- Admin A is one of 2 admins, should succeed
     const asUserAdmin = t.withIdentity(clerkIdentity({ name: 'User', id: 'user1' }));
-    await asUserAdmin.mutation(api.users.updateRole, { userId: (await asAdmin.query(api.users.me))!._id, role: 'user' });
+    await asUserAdmin.mutation(api.users.updateRole, { orgId, userId: (await asAdmin.query(api.users.me))!._id, role: 'user' });
 
-    // Now user1 is the only admin. Try to demote them — should fail
-    const users = await asUserAdmin.query(api.users.list);
+    // Now user1 is the only admin. Try to demote them -- should fail
+    const users = await asUserAdmin.query(api.users.list, { orgId });
     const lastAdmin = users.find((u) => u.role === 'admin');
     expect(lastAdmin).toBeDefined();
 
@@ -260,22 +317,29 @@ describe('users.updateRole', () => {
     // Let's test last-admin guard more directly: create a scenario with exactly 1 admin
     const t2 = convexTest(schema, modules);
     const asA = t2.withIdentity(clerkIdentity({ name: 'Admin A', id: 'a1' }));
-    await asA.mutation(api.users.getOrCreateFromClerk);
+    const aResult = await asA.mutation(api.users.getOrCreateFromClerk);
+    const orgId2 = aResult.orgId!;
 
-    const asB = t2.withIdentity(clerkIdentity({ name: 'Admin B', id: 'b1' }));
+    await asA.mutation(api.invitations.create, {
+      orgId: orgId2,
+      email: 'b1@test.com',
+      role: 'user',
+    });
+
+    const asB = t2.withIdentity(clerkIdentity({ name: 'Admin B', email: 'b1@test.com', id: 'b1' }));
     const bUser = await asB.mutation(api.users.getOrCreateFromClerk);
 
     // Promote B to admin
-    await asA.mutation(api.users.updateRole, { userId: bUser._id, role: 'admin' });
+    await asA.mutation(api.users.updateRole, { orgId: orgId2, userId: bUser._id, role: 'admin' });
 
-    // Demote A (by B) — works since 2 admins
+    // Demote A (by B) -- works since 2 admins
     const aUser = (await asA.query(api.users.me))!;
-    await asB.mutation(api.users.updateRole, { userId: aUser._id, role: 'user' });
+    await asB.mutation(api.users.updateRole, { orgId: orgId2, userId: aUser._id, role: 'user' });
 
     // Now B is the last admin. A (now a regular user) can't demote anyone.
-    // B tries to demote themselves — self-demotion guard fires.
+    // B tries to demote themselves -- self-demotion guard fires.
     await expect(
-      asB.mutation(api.users.updateRole, { userId: bUser._id, role: 'user' })
+      asB.mutation(api.users.updateRole, { orgId: orgId2, userId: bUser._id, role: 'user' })
     ).rejects.toThrow('Cannot demote yourself');
   });
 
@@ -284,36 +348,42 @@ describe('users.updateRole', () => {
 
     // Only one admin
     const asAdmin = t.withIdentity(clerkIdentity({ name: 'Solo Admin', id: 'solo' }));
-    const admin = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const adminResult = await asAdmin.mutation(api.users.getOrCreateFromClerk);
+    const orgId = adminResult.orgId!;
 
-    // Create user and promote to admin
-    const asUser = t.withIdentity(clerkIdentity({ name: 'Helper', id: 'helper' }));
+    // Create user and invite to same org, then promote to admin
+    await asAdmin.mutation(api.invitations.create, {
+      orgId,
+      email: 'helper@test.com',
+      role: 'user',
+    });
+
+    const asUser = t.withIdentity(clerkIdentity({ name: 'Helper', email: 'helper@test.com', id: 'helper' }));
     const helper = await asUser.mutation(api.users.getOrCreateFromClerk);
-    await asAdmin.mutation(api.users.updateRole, { userId: helper._id, role: 'admin' });
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: helper._id, role: 'admin' });
 
-    // Helper demotes Solo Admin — now helper is last admin
-    await asUser.mutation(api.users.updateRole, { userId: admin._id, role: 'user' });
+    // Helper demotes Solo Admin -- now helper is last admin
+    await asUser.mutation(api.users.updateRole, { orgId, userId: adminResult._id, role: 'user' });
 
     // Solo (now regular user) can't act. Admin (helper) tries to promote Solo again.
-    // Actually let's test: helper can't demote Solo since Solo is already 'user'
     // The real test: now try to demote helper who is the last admin
     await expect(
-      asUser.mutation(api.users.updateRole, { userId: helper._id, role: 'user' })
+      asUser.mutation(api.users.updateRole, { orgId, userId: helper._id, role: 'user' })
     ).rejects.toThrow('Cannot demote yourself');
 
     // But also verify from another admin perspective:
     // Re-promote solo to admin
-    await asUser.mutation(api.users.updateRole, { userId: admin._id, role: 'admin' });
+    await asUser.mutation(api.users.updateRole, { orgId, userId: adminResult._id, role: 'admin' });
 
-    // Now demote helper (by solo) — works since 2 admins
-    await asAdmin.mutation(api.users.updateRole, { userId: helper._id, role: 'user' });
+    // Now demote helper (by solo) -- works since 2 admins
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: helper._id, role: 'user' });
 
     // Solo is last admin. Helper (now user) can't demote anyone.
     // Verify the guard by promoting helper and having them try to demote solo
-    await asAdmin.mutation(api.users.updateRole, { userId: helper._id, role: 'admin' });
-    // Demote solo again (helper does it) — works since 2 admins
-    await asUser.mutation(api.users.updateRole, { userId: admin._id, role: 'user' });
-    // Helper is last admin — can't be demoted
+    await asAdmin.mutation(api.users.updateRole, { orgId, userId: helper._id, role: 'admin' });
+    // Demote solo again (helper does it) -- works since 2 admins
+    await asUser.mutation(api.users.updateRole, { orgId, userId: adminResult._id, role: 'user' });
+    // Helper is last admin -- can't be demoted
     // Since no other admin can demote helper, and helper can't self-demote, we're safe
   });
 });

@@ -1,10 +1,11 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAdmin } from "./lib/auth";
+import { requireOrgAdmin } from "./lib/auth";
 import { sanitize, validatePoints, MAX_LENGTHS } from "./lib/validators";
 
 export const seedAll = mutation({
   args: {
+    orgId: v.id("organizations"),
     departments: v.array(
       v.object({
         id: v.string(),
@@ -29,11 +30,14 @@ export const seedAll = mutation({
       }),
     ),
   },
-  handler: async (ctx, { departments }) => {
-    await requireAdmin(ctx);
+  handler: async (ctx, { orgId, departments }) => {
+    await requireOrgAdmin(ctx, orgId);
 
-    // Idempotent: only seed if no departments exist
-    const existing = await ctx.db.query("departments").first();
+    // Idempotent: only seed if no departments exist for this org
+    const existing = await ctx.db
+      .query("departments")
+      .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
+      .first();
     if (existing) return;
 
     for (let i = 0; i < departments.length; i++) {
@@ -46,6 +50,7 @@ export const seedAll = mutation({
         name: cleanName,
         icon: cleanIcon,
         sortOrder: i,
+        orgId,
       });
 
       for (let j = 0; j < dept.questions.length; j++) {
@@ -65,6 +70,7 @@ export const seedAll = mutation({
           pointsPartial: q.pointsPartial,
           pointsNo: q.pointsNo,
           sortOrder: j,
+          orgId,
         });
       }
     }

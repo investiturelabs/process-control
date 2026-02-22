@@ -12,7 +12,7 @@ import { track } from '@/lib/analytics';
 import { captureException } from '@/lib/errorTracking';
 
 export function SettingsPage() {
-  const { company, setCompany, currentUser, departments, generateTestData, users, sessions, invitations, orgRole } =
+  const { company, setCompany, departments, generateTestData, users, sessions, invitations, orgRole } =
     useAppStore();
   const isAdmin = orgRole === 'admin';
   const navigate = useNavigate();

@@ -1,6 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAuth, requireOrgAdmin, requireOrgMember } from "./lib/auth";
+import { requireOrgAdmin, requireOrgMember } from "./lib/auth";
 import { logChange } from "./changeLog";
 
 const AVATAR_COLORS = [

@@ -70,7 +70,7 @@ function formatTimestamp(ts: string): string {
 }
 
 export function ActivityLogPage() {
-  const { currentUser, orgId, orgRole } = useAppStore();
+  const { orgId, orgRole } = useAppStore();
   const isAdmin = orgRole === 'admin';
   const [entityType, setEntityType] = useState<string>('all');
 

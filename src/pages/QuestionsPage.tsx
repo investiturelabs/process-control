@@ -29,7 +29,7 @@ import { captureException } from '@/lib/errorTracking';
 import { ReminderFormDialog } from '@/components/ReminderFormDialog';
 
 export function QuestionsPage() {
-  const { currentUser, departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment, savedAnswers, saveSavedAnswer, removeSavedAnswer, loading, orgRole } =
+  const { departments, updateDepartments, addQuestion, updateQuestion, removeQuestion, addDepartment, updateDepartment, removeDepartment, duplicateDepartment, savedAnswers, saveSavedAnswer, removeSavedAnswer, loading, orgRole } =
     useAppStore();
   const isAdmin = orgRole === 'admin';
 

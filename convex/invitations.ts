@@ -1,7 +1,7 @@
 import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { requireOrgAdmin, requireOrgMember } from "./lib/auth";
+import { requireOrgAdmin } from "./lib/auth";
 import { sanitizeEmail } from "./lib/validators";
 import { logChange } from "./changeLog";
 

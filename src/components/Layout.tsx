@@ -30,7 +30,7 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { currentUser, company, loading, orgRole } = useAppStore();
+  const { company, loading, orgRole } = useAppStore();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loadingSlow, setLoadingSlow] = useState(false);

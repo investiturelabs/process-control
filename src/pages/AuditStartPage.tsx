@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/context';
 import { DeptIcon } from '@/components/DeptIcon';
 import { ChevronRight, TrendingUp, ClipboardList, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getScoreColor } from '@/lib/score-colors';
@@ -99,6 +100,18 @@ export function AuditStartPage() {
       </div>
 
       {/* Department cards */}
+      {departments.length === 0 ? (
+        <div className="text-center py-16">
+          <ClipboardList size={32} className="mx-auto text-muted-foreground/30 mb-3" />
+          <p className="text-sm font-semibold mb-1">No departments configured yet</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Set up your audit checklist to get started.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => navigate('/questions')}>
+            Go to Questions
+          </Button>
+        </div>
+      ) : (
       <div>
         <h2 className="text-sm font-semibold mb-3">Start an audit</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -180,6 +193,7 @@ export function AuditStartPage() {
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }

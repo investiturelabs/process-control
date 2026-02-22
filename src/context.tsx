@@ -12,7 +12,6 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import type { Store } from '@/store-types';
 import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer, Reminder, ReminderFrequency } from './types';
-import { seedDepartments } from './seed-data';
 import type { Id } from '../convex/_generated/dataModel';
 import { track, identify } from '@/lib/analytics';
 import { setErrorTrackingUser } from '@/lib/errorTracking';
@@ -103,7 +102,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const removeDepartmentMutation = useMutation(api.departments.remove);
   const createInvitationMutation = useMutation(api.invitations.create);
   const removeInvitationMutation = useMutation(api.invitations.remove);
-  const seedAllMutation = useMutation(api.seed.seedAll);
   const generateTestDataMutation = useMutation(api.testData.generate);
   const setActiveMutation = useMutation(api.users.setActive);
   const duplicateDepartmentMutation = useMutation(api.departments.duplicate);
@@ -221,17 +219,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCurrentUser(mapped);
     }
   }, [usersData, currentUser]);
-
-  // --- Auto-seed: if departments query returns empty, seed from seed-data ---
-  const seeded = useRef(false);
-  useEffect(() => {
-    if (departmentsData !== undefined && departmentsData.length === 0 && !seeded.current) {
-      seeded.current = true;
-      seedAllMutation({ departments: seedDepartments }).catch(() => {
-        seeded.current = false;
-      });
-    }
-  }, [departmentsData, seedAllMutation]);
 
   // --- Actions (no actorId/actorName — server derives from JWT) ---
   const setCompany = useCallback(

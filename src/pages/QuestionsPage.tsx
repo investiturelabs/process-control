@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore } from '@/context';
-import { RotateCcw, Plus, Pencil, Trash2, Copy, Upload, Download, Search, X, Pin, Bell } from 'lucide-react';
+import { RotateCcw, Plus, Pencil, Trash2, Copy, Upload, Download, Search, X, Pin, Bell, ClipboardList } from 'lucide-react';
 import { seedDepartments } from '@/seed-data';
 import type { Question, Department, SavedAnswer } from '@/types';
 import { toast } from 'sonner';
@@ -34,6 +34,8 @@ export function QuestionsPage() {
   const isAdmin = currentUser?.role === 'admin';
 
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showSeedDialog, setShowSeedDialog] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   // Question form dialog state
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
@@ -130,6 +132,20 @@ export function QuestionsPage() {
     } catch (err) {
       captureException(err);
       toast.error('Failed to reset departments.');
+    }
+  };
+
+  const handleLoadSampleData = async () => {
+    setSeeding(true);
+    try {
+      await updateDepartments(seedDepartments);
+      setShowSeedDialog(false);
+      toast.success('Sample data loaded.');
+    } catch (err) {
+      captureException(err);
+      toast.error('Failed to load sample data.');
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -324,6 +340,7 @@ export function QuestionsPage() {
               <Plus size={12} />
               Add department
             </Button>
+          {departments.length > 0 && (
           <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
             <DialogTrigger asChild>
               <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground">
@@ -348,6 +365,7 @@ export function QuestionsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          )}
           </div>
         </CardHeader>
         <div className="px-6 pb-0 pt-2">
@@ -378,6 +396,29 @@ export function QuestionsPage() {
           )}
         </div>
         <CardContent>
+          {departments.length === 0 && !searchQuery.trim() ? (
+            <div className="text-center py-12">
+              <ClipboardList size={32} className="mx-auto text-muted-foreground/30 mb-3" />
+              <h3 className="text-sm font-semibold mb-1">No departments yet</h3>
+              <p className="text-sm text-muted-foreground mb-5 max-w-xs mx-auto">
+                Create your first department to start building your audit checklist, or load sample data to explore the app.
+              </p>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <Button size="sm" onClick={openAddDept}>
+                  <Plus size={14} className="mr-1.5" />
+                  Add department
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setImportDialogOpen(true)}>
+                  <Upload size={14} className="mr-1.5" />
+                  Import CSV
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setShowSeedDialog(true)}>
+                  <Download size={14} className="mr-1.5" />
+                  Load sample data
+                </Button>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-4">
             {filteredDepartments.map((dept) => (
               <details key={dept.id} className="group" open={!!searchQuery.trim() || undefined}>
@@ -507,8 +548,29 @@ export function QuestionsPage() {
               </div>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Load sample data confirmation dialog */}
+      <Dialog open={showSeedDialog} onOpenChange={setShowSeedDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Load sample data?</DialogTitle>
+            <DialogDescription>
+              This will create 9 departments with 171 audit questions based on grocery/retail PCR audit templates.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSeedDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleLoadSampleData} disabled={seeding}>
+              {seeding ? 'Loading...' : 'Load sample data'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Saved answers section */}
       <Card>

@@ -66,7 +66,8 @@ export const getOrCreateFromClerk = mutation({
 
     // Determine role: first user = admin, invited users get invited role, otherwise "user"
     const allUsers = await ctx.db.query("users").collect();
-    const isFirst = allUsers.length === 0;
+    const realUsers = allUsers.filter(u => !u.tokenIdentifier.startsWith("test|"));
+    const isFirst = realUsers.length === 0;
 
     const email = (identity.email ?? "").toLowerCase();
     let role: "admin" | "user" = isFirst ? "admin" : "user";

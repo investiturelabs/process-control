@@ -1,0 +1,21 @@
+Department,Risk Category,Question,Criteria,Answer Type,Points Yes,Points Partial,Points No
+Front of House,Cleanliness,Are all tables wiped down and sanitized?,Tables should be clean and free of debris between customers.,yes_no,5,,0
+Front of House,Cleanliness,Are floors swept and mopped?,No visible debris or sticky spots on floors.,yes_no,5,,0
+Front of House,Cleanliness,Are windows and glass doors free of smudges?,Glass surfaces should be clean and streak-free.,yes_no,3,,0
+Front of House,Customer Experience,Is background music at an appropriate volume?,Music should be audible but not overpowering conversation.,yes_no,2,,0
+Front of House,Customer Experience,Are menus clean and up to date?,No stains or torn pages; pricing matches current specials.,yes_no_partial,5,3,0
+Front of House,Safety,Are wet floor signs placed when needed?,Signs must be visible near any wet or recently mopped areas.,yes_no,5,,0
+Front of House,Safety,Are emergency exits clearly marked and unobstructed?,Exit signs illuminated; pathways clear of furniture and boxes.,yes_no,10,,0
+Kitchen,Food Safety,Are food prep surfaces sanitized between tasks?,Cutting boards and counters wiped with approved sanitizer between different food types.,yes_no,10,,0
+Kitchen,Food Safety,Is the walk-in cooler at or below 40°F?,Temperature log checked; thermometer reading verified.,yes_no,10,,0
+Kitchen,Food Safety,Are raw and cooked items stored separately?,Raw proteins stored below ready-to-eat items; no cross-contamination risk.,yes_no,10,,0
+Kitchen,Food Safety,"Are all items labeled with prep date, use-by date, and contents?",Every container in cooler and dry storage must have a complete label.,yes_no_partial,10,5,0
+Kitchen,Hygiene,Are team members wearing clean uniforms and hair nets?,No stains on uniforms; hair fully covered.,yes_no,5,,0
+Kitchen,Hygiene,Is the handwashing station stocked and accessible?,Soap and paper towels available; sink not blocked by equipment.,yes_no,5,,0
+Kitchen,Equipment,Is the dishwasher reaching proper sanitizing temperature?,Final rinse must reach 180°F; check temperature gauge.,yes_no,10,,0
+Kitchen,Equipment,Are knives stored in designated holders when not in use?,No loose knives on counters or in sinks.,yes_no,5,,0
+Storage,Inventory,Is FIFO rotation being followed?,Oldest items at the front; new deliveries placed behind existing stock.,yes_no_partial,10,5,0
+Storage,Inventory,Are all shelves at least 6 inches off the floor?,No product stored directly on the ground.,yes_no,5,,0
+Storage,Safety,Are chemicals stored separately from food items?,Cleaning supplies in a separate locked area or clearly divided shelf.,yes_no,10,,0
+Storage,Safety,Is the fire extinguisher inspection tag current?,Monthly inspection sticker within the last 30 days.,yes_no,5,,0
+Storage,Organization,Are dry goods stored in airtight containers?,Open bags transferred to sealed bins with labels.,yes_no_partial,5,3,0

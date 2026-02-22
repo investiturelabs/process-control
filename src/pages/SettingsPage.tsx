@@ -91,7 +91,7 @@ export function SettingsPage() {
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Sprouts Farmers Market"
+                  placeholder="Your Company Name"
                 />
               </div>
               <div className="space-y-1">
@@ -118,41 +118,43 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Test data */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Database size={16} className="text-muted-foreground" />
-            Test Data
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-3">
-            Generate 6 months of sample audit data across all departments to preview charts and analytics.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            disabled={generatingData || dataGenerated}
-            onClick={async () => {
-              setGeneratingData(true);
-              try {
-                await generateTestData();
-                setDataGenerated(true);
-              } catch (err) {
-                captureException(err);
-                toast.error('Failed to generate test data.');
-              } finally {
-                setGeneratingData(false);
-              }
-            }}
-          >
-            <Database size={14} />
-            {generatingData ? 'Generating...' : dataGenerated ? 'Data generated' : 'Generate test data'}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Test data — dev only */}
+      {import.meta.env.DEV && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Database size={16} className="text-muted-foreground" />
+              Test Data
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              Generate 6 months of sample audit data across all departments to preview charts and analytics.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={generatingData || dataGenerated}
+              onClick={async () => {
+                setGeneratingData(true);
+                try {
+                  await generateTestData();
+                  setDataGenerated(true);
+                } catch (err) {
+                  captureException(err);
+                  toast.error('Failed to generate test data.');
+                } finally {
+                  setGeneratingData(false);
+                }
+              }}
+            >
+              <Database size={14} />
+              {generatingData ? 'Generating...' : dataGenerated ? 'Data generated' : 'Generate test data'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Data backup */}
       <Card>

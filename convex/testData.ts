@@ -2,9 +2,9 @@ import { mutation } from "./_generated/server";
 import { requireAdmin } from "./lib/auth";
 
 const AUDITORS = [
-  { name: "Sarah Chen", email: "sarah@sprouts.com" },
-  { name: "Marcus Johnson", email: "marcus@sprouts.com" },
-  { name: "Emily Rodriguez", email: "emily@sprouts.com" },
+  { name: "Sarah Chen", email: "sarah@example.com" },
+  { name: "Marcus Johnson", email: "marcus@example.com" },
+  { name: "Emily Rodriguez", email: "emily@example.com" },
 ];
 
 const AVATAR_COLORS = [

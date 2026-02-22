@@ -252,10 +252,21 @@ export function DashboardPage() {
         )}
 
         <div className="text-center py-16">
-          <p className="text-muted-foreground text-sm">No audits completed yet.</p>
-          <Button variant="link" onClick={() => navigate('/audit')} className="mt-3">
-            Start your first audit
-          </Button>
+          {departments.length === 0 ? (
+            <>
+              <p className="text-muted-foreground text-sm">Set up your audit checklist first.</p>
+              <Button variant="link" onClick={() => navigate('/questions')} className="mt-3">
+                Go to Questions
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground text-sm">No audits completed yet.</p>
+              <Button variant="link" onClick={() => navigate('/audit')} className="mt-3">
+                Start your first audit
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );

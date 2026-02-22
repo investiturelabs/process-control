@@ -111,7 +111,7 @@ export const seedDepartments: Department[] = [
       q(GENERAL_ID, 'Front End', 'Are check-stand cubbies stocked and registers functioning?', 'All register stations fully stocked with bags and supplies; equipment working.', 5, 'yes_no_partial', 3),
       q(GENERAL_ID, 'Front End', 'Are cash sweeps completed appropriately?', 'Scheduled cash sweeps completed on time with proper documentation.', 5, 'yes_no_partial', 3),
       q(GENERAL_ID, 'Front End', 'Do cashier/HC initials appear on sweep slips?', 'All sweep slips signed by both cashier and head cashier.', 5, 'yes_no_partial', 3),
-      q(GENERAL_ID, 'Front End', 'Are cashiers asking about Sprouts app?', 'Cashiers promoting Sprouts app to customers during checkout.', 5, 'yes_no_partial', 3),
+      q(GENERAL_ID, 'Front End', 'Are cashiers asking about the store app?', 'Cashiers promoting the store app to customers during checkout.', 5, 'yes_no_partial', 3),
       q(GENERAL_ID, 'Front End', 'Is curbside delivery operating in compliance?', 'Curbside pickup following all procedures including temperature and timing.', 5, 'yes_no_partial', 3),
 
       // Human Resources (50 pts)

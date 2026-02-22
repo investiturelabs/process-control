@@ -242,3 +242,10 @@ To reset all data, clear localStorage in the browser devtools or click "Reset to
 ## License
 
 Private — not licensed for redistribution.
+
+  For routine deploys (no migrations): Option B works great — npx convex deploy --yes && npm run build in Cloudflare.
+
+  For migration deploys: You'll always need to do it manually:
+  1. Deploy permissive schema: npx convex deploy --yes
+  2. Run migration: npx convex run --prod migrations/whatever:run
+  3. Tighten schema, push to trigger final deploy

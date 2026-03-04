@@ -6,6 +6,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { config } from '@/lib/config';
 import { Shield, BarChart3, Users } from 'lucide-react';
 import logoImg from '@/assets/auditflowslogo.png';
+import { LandingPage } from '@/pages/LandingPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AuditPage } from '@/pages/AuditPage';
 import { AuditStartPage } from '@/pages/AuditStartPage';
@@ -133,8 +134,10 @@ export default function App() {
       <ErrorBoundary>
         <SignedOut>
           <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/sign-in" element={<AuthPage mode="sign-in" />} />
             <Route path="/sign-up" element={<AuthPage mode="sign-up" />} />
-            <Route path="*" element={<AuthPage mode="sign-in" />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </SignedOut>
         <SignedIn>

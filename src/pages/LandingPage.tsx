@@ -23,6 +23,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PRICING } from '@/lib/pricing';
 import logoImg from '@/assets/auditflowslogo.png';
 
 /* ------------------------------------------------------------------ */
@@ -375,6 +376,8 @@ function AnalyticsMockup() {
 /*  Main Landing Page                                                 */
 /* ------------------------------------------------------------------ */
 export function LandingPage() {
+  const [annual, setAnnual] = useState(false);
+
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -625,57 +628,127 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* ===== PRICING PLACEHOLDER ===== */}
+      {/* ===== PRICING ===== */}
       <section id="pricing" className="py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <RevealSection>
             <div className="text-center max-w-2xl mx-auto mb-14">
               <Badge variant="secondary" className="mb-4">Pricing</Badge>
               <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 mb-4">
-                Simple pricing, coming soon
+                Simple, transparent pricing
               </h2>
               <p className="text-base text-slate-500 leading-relaxed">
-                We&apos;re finalizing our plans. Sign up now to lock in early access and special pricing.
+                Start with a 14-day free trial. Scale as your team grows.
               </p>
+
+              {/* Billing toggle */}
+              <div className="inline-flex items-center gap-3 bg-slate-100 rounded-full p-1 mt-6">
+                <button
+                  onClick={() => setAnnual(false)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    !annual ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setAnnual(true)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+                    annual ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Annual
+                  <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                    Save 20%
+                  </span>
+                </button>
+              </div>
             </div>
 
-            <div className="max-w-sm mx-auto">
-              <Card className="relative overflow-hidden border-blue-200/80 shadow-lg shadow-blue-900/5">
-                {/* Early access ribbon */}
-                <div className="absolute top-4 right-4">
-                  <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 shadow-sm">
-                    <Sparkles size={10} /> Early Access
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl mx-auto">
+              {/* Pro card */}
+              <div className="relative bg-white rounded-2xl border-2 border-blue-600 p-8 shadow-lg shadow-blue-600/10 ring-1 ring-blue-600">
+                <div className="absolute -top-3.5 left-8">
+                  <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 shadow-sm px-4 py-1">
+                    Recommended
                   </Badge>
                 </div>
-                <CardContent className="text-center pt-0 pb-2">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/20">
-                    <Star size={24} className="text-white" />
+
+                <h3 className="text-xl font-bold text-slate-900 mb-1">Pro</h3>
+                <p className="text-sm text-slate-500 mb-5">Everything you need to run better audits</p>
+
+                <div className="mb-5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-extrabold tracking-tight text-slate-900">${annual ? PRICING.annual : PRICING.monthly}</span>
+                    <span className="text-slate-500 text-sm">/user/mo</span>
                   </div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-1">Free During Beta</h3>
-                  <p className="text-sm text-slate-500 mb-6">Full access to all features while we perfect the platform.</p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {PRICING.minSeats}-seat minimum — ${annual ? PRICING.annual * PRICING.minSeats : PRICING.monthly * PRICING.minSeats}/mo base
+                    {annual && <span className="text-emerald-600 font-medium ml-2">billed annually</span>}
+                  </p>
+                </div>
 
-                  <ul className="text-left space-y-2.5 mb-6">
-                    {[
-                      'Unlimited audits & team members',
-                      'All 9 department templates',
-                      'Full analytics dashboard',
-                      'CSV export & import',
-                      'Priority support',
-                    ].map((item) => (
-                      <li key={item} className="flex items-center gap-2 text-sm text-slate-600">
-                        <CheckCircle2 size={15} className="text-blue-600 shrink-0" />
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
+                <ul className="space-y-2.5 mb-6">
+                  {[
+                    'Unlimited audits & analytics',
+                    'Team management & roles',
+                    'CSV import/export',
+                    'Reminders & scheduling',
+                    '14-day free trial',
+                  ].map((item) => (
+                    <li key={item} className="flex items-center gap-2 text-sm text-slate-600">
+                      <CheckCircle2 size={15} className="text-blue-600 shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
 
-                  <Button className="w-full h-11 shadow-md shadow-blue-600/20" asChild>
-                    <Link to="/sign-up">
-                      Get Early Access <ChevronRight size={16} />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
+                <Button className="w-full h-11 shadow-md shadow-blue-600/20" asChild>
+                  <Link to="/sign-up">
+                    Start Free Trial <ChevronRight size={16} />
+                  </Link>
+                </Button>
+              </div>
+
+              {/* Enterprise card */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+                <h3 className="text-xl font-bold text-slate-900 mb-1">Enterprise</h3>
+                <p className="text-sm text-slate-500 mb-5">For large teams with advanced needs</p>
+
+                <div className="mb-5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-extrabold tracking-tight text-slate-900">Custom</span>
+                  </div>
+                  <p className="text-sm text-slate-400 mt-1">Volume pricing for 25+ seats</p>
+                </div>
+
+                <ul className="space-y-2.5 mb-6">
+                  {[
+                    'Everything in Pro',
+                    'Unlimited seats',
+                    'Dedicated onboarding included',
+                    'Priority support',
+                    'Custom audit templates',
+                  ].map((item) => (
+                    <li key={item} className="flex items-center gap-2 text-sm text-slate-600">
+                      <CheckCircle2 size={15} className="text-blue-600 shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+
+                <Button variant="outline" className="w-full h-11" asChild>
+                  <a href="mailto:sales@auditflows.com">
+                    Contact Sales <ChevronRight size={16} />
+                  </a>
+                </Button>
+              </div>
+            </div>
+
+            <div className="text-center mt-8">
+              <Link to="/pricing" className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center gap-1">
+                See full feature comparison <ChevronRight size={14} />
+              </Link>
             </div>
           </RevealSection>
         </div>

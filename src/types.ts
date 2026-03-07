@@ -141,3 +141,24 @@ export interface ReminderCompletion {
   completedByName: string;
   note?: string;
 }
+
+export type SubscriptionStatus =
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'canceled'
+  | 'unpaid'
+  | 'incomplete';
+
+export interface Subscription {
+  id: string;
+  orgId: string;
+  status: SubscriptionStatus;
+  quantity: number;
+  billingInterval: 'month' | 'year';
+  trialEndsAt?: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

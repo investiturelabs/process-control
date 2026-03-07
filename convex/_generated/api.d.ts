@@ -11,6 +11,7 @@
 import type * as changeLog from "../changeLog.js";
 import type * as crons from "../crons.js";
 import type * as departments from "../departments.js";
+import type * as http from "../http.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_reminderUtils from "../lib/reminderUtils.js";
@@ -23,6 +24,7 @@ import type * as reminders from "../reminders.js";
 import type * as savedAnswers from "../savedAnswers.js";
 import type * as seed from "../seed.js";
 import type * as sessions from "../sessions.js";
+import type * as stripe from "../stripe.js";
 import type * as testData from "../testData.js";
 import type * as users from "../users.js";
 
@@ -36,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   changeLog: typeof changeLog;
   crons: typeof crons;
   departments: typeof departments;
+  http: typeof http;
   invitations: typeof invitations;
   "lib/auth": typeof lib_auth;
   "lib/reminderUtils": typeof lib_reminderUtils;
@@ -48,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   savedAnswers: typeof savedAnswers;
   seed: typeof seed;
   sessions: typeof sessions;
+  stripe: typeof stripe;
   testData: typeof testData;
   users: typeof users;
 }>;

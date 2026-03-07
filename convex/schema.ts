@@ -167,4 +167,30 @@ export default defineSchema({
     note: v.optional(v.string()),
     orgId: v.id("organizations"),
   }).index("by_orgId_reminderId", ["orgId", "reminderId"]),
+
+  subscriptions: defineTable({
+    orgId: v.id("organizations"),
+    stripeCustomerId: v.string(),
+    stripeSubscriptionId: v.string(),
+    stripePriceId: v.string(),
+    status: v.union(
+      v.literal("trialing"),
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("canceled"),
+      v.literal("unpaid"),
+      v.literal("incomplete"),
+    ),
+    quantity: v.number(),
+    billingInterval: v.union(v.literal("month"), v.literal("year")),
+    trialEndsAt: v.optional(v.string()),
+    currentPeriodEnd: v.string(),
+    cancelAtPeriodEnd: v.boolean(),
+    stripeEventCreated: v.optional(v.number()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_orgId", ["orgId"])
+    .index("by_stripeCustomerId", ["stripeCustomerId"])
+    .index("by_stripeSubscriptionId", ["stripeSubscriptionId"]),
 });

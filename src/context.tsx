@@ -8,10 +8,10 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import type { Store } from '@/store-types';
-import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer, Reminder, ReminderFrequency } from './types';
+import type { User, Company, Department, AuditSession, Invitation, Role, Question, SavedAnswer, Reminder, ReminderFrequency, Subscription } from './types';
 import type { Id } from '../convex/_generated/dataModel';
 import { track, identify } from '@/lib/analytics';
 import { setErrorTrackingUser } from '@/lib/errorTracking';
@@ -128,6 +128,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const invitationsData = useQuery(api.invitations.list, (typedOrgId && orgRole === 'admin') ? { orgId: typedOrgId } : 'skip');
   const savedAnswersData = useQuery(api.savedAnswers.list, typedOrgId ? { orgId: typedOrgId } : 'skip');
   const remindersData = useQuery(api.reminders.list, typedOrgId ? { orgId: typedOrgId } : 'skip');
+  const subscriptionData = useQuery(api.stripe.getForOrg, typedOrgId ? { orgId: typedOrgId } : 'skip');
 
   // --- Convex mutations ---
   const updateRoleMutation = useMutation(api.users.updateRole);
@@ -154,6 +155,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateReminderMutation = useMutation(api.reminders.update);
   const removeReminderMutation = useMutation(api.reminders.remove);
   const completeReminderMutation = useMutation(api.reminders.complete);
+  const createCheckoutSessionAction = useAction(api.stripe.createCheckoutSession);
+  const createPortalSessionAction = useAction(api.stripe.createPortalSession);
 
   // --- Loading state ---
   const loading =
@@ -164,6 +167,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (orgRole === 'admin' && invitationsData === undefined) ||
     savedAnswersData === undefined ||
     remindersData === undefined ||
+    subscriptionData === undefined ||
     currentUser === null ||
     orgId === null;
 
@@ -222,6 +226,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updatedAt: sa.updatedAt,
     }));
   }, [savedAnswersData]);
+
+  const subscription = useMemo<Subscription | null>(() => {
+    if (!subscriptionData) return null;
+    return {
+      id: subscriptionData._id as string,
+      orgId: subscriptionData.orgId as string,
+      status: subscriptionData.status,
+      quantity: subscriptionData.quantity,
+      billingInterval: subscriptionData.billingInterval,
+      trialEndsAt: subscriptionData.trialEndsAt,
+      currentPeriodEnd: subscriptionData.currentPeriodEnd,
+      cancelAtPeriodEnd: subscriptionData.cancelAtPeriodEnd,
+      createdAt: subscriptionData.createdAt,
+      updatedAt: subscriptionData.updatedAt,
+    };
+  }, [subscriptionData]);
 
   const reminders = useMemo<Reminder[]>(() => {
     return (remindersData ?? []).map((r) => ({
@@ -479,6 +499,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [completeReminderMutation, typedOrgId],
   );
 
+  const createCheckoutSession = useCallback(
+    async (annual: boolean) => {
+      if (!typedOrgId) throw new Error("No organization selected");
+      return await createCheckoutSessionAction({ orgId: typedOrgId, annual });
+    },
+    [createCheckoutSessionAction, typedOrgId],
+  );
+
+  const createPortalSession = useCallback(
+    async () => {
+      if (!typedOrgId) throw new Error("No organization selected");
+      return await createPortalSessionAction({ orgId: typedOrgId });
+    },
+    [createPortalSessionAction, typedOrgId],
+  );
+
+  const updateSeatsAction = useAction(api.stripe.updateSeats);
+  const updateSeats = useCallback(
+    async (quantity: number) => {
+      if (!typedOrgId) throw new Error("No organization selected");
+      await updateSeatsAction({ orgId: typedOrgId, quantity });
+    },
+    [updateSeatsAction, typedOrgId],
+  );
+
   const store = useMemo<Store>(() => ({
     currentUser,
     users,
@@ -515,6 +560,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateReminder,
     removeReminder,
     completeReminder,
+    subscription,
+    createCheckoutSession,
+    createPortalSession,
+    updateSeats,
   }), [
     currentUser, users, company, departments, sessions, invitations, savedAnswers, loading,
     orgId, orgRole,
@@ -526,6 +575,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setUserActive, duplicateDepartment,
     saveSavedAnswer, updateSavedAnswer, removeSavedAnswer,
     reminders, createReminder, updateReminder, removeReminder, completeReminder,
+    subscription, createCheckoutSession, createPortalSession, updateSeats,
   ]);
 
   // Show sync error UI

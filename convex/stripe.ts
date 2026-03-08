@@ -13,11 +13,18 @@ import { logChange } from "./changeLog";
 export const getForOrg = query({
   args: { orgId: v.id("organizations") },
   handler: async (ctx, { orgId }) => {
+    // Auth may not be ready yet on initial page load — return null
+    // instead of throwing so the reactive query retries once the
+    // JWT is available.
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
     await requireOrgMember(ctx, orgId);
     const doc = await ctx.db
       .query("subscriptions")
       .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
-      .unique();
+      .order("desc")
+      .first();
     if (!doc) return null;
     return {
       _id: doc._id,
@@ -42,7 +49,8 @@ export const getSubscriptionByOrgId = internalQuery({
     return await ctx.db
       .query("subscriptions")
       .withIndex("by_orgId", (q) => q.eq("orgId", orgId))
-      .unique();
+      .order("desc")
+      .first();
   },
 });
 
@@ -146,6 +154,16 @@ export const upsertSubscription = internalMutation({
         orgId: args.orgId,
       });
     } else {
+      // Remove any stale subscription rows for this org to prevent
+      // duplicate-row crashes in queries that use .first() on by_orgId.
+      const staleRows = await ctx.db
+        .query("subscriptions")
+        .withIndex("by_orgId", (q) => q.eq("orgId", args.orgId))
+        .collect();
+      for (const row of staleRows) {
+        await ctx.db.delete(row._id);
+      }
+
       const id = await ctx.db.insert("subscriptions", {
         ...args,
         createdAt: now,

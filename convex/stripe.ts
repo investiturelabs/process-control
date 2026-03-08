@@ -20,6 +20,25 @@ export const getForOrg = query({
     if (!identity) return null;
 
     await requireOrgMember(ctx, orgId);
+
+    // Founder bypass — always return an active subscription
+    const founderOrgIds = (process.env.FOUNDER_ORG_IDS ?? "").split(",").filter(Boolean);
+    if (founderOrgIds.includes(orgId as string)) {
+      return {
+        _id: "founder" as any,
+        _creationTime: 0,
+        orgId,
+        status: "active" as const,
+        quantity: 999,
+        billingInterval: "year" as const,
+        trialEndsAt: undefined,
+        currentPeriodEnd: "2099-12-31T00:00:00.000Z",
+        cancelAtPeriodEnd: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     const doc = await ctx.db
       .query("subscriptions")
       .withIndex("by_orgId", (q) => q.eq("orgId", orgId))

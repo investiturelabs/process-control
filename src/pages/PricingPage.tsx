@@ -163,7 +163,7 @@ const FAQ = [
   },
   {
     q: 'What is the 3-seat minimum?',
-    a: 'The Pro plan requires at least 3 seats ($87/mo). This ensures your team gets the collaborative value of AuditFlows from day one.',
+    a: `The Pro plan requires at least ${PRICING.minSeats} seats ($${(PRICING.monthly * PRICING.minSeats).toFixed(2)}/mo). This ensures your team gets the collaborative value of AuditFlows from day one.`,
   },
   {
     q: 'Can I add more seats later?',

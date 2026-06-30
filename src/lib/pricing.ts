@@ -1,5 +1,5 @@
 export const PRICING = {
-  monthly: 29,
-  annual: 23,
+  monthly: 9.99,
+  annual: 7.99,
   minSeats: 3,
 } as const;
